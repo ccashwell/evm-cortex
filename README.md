@@ -32,6 +32,20 @@ cd evm-cortex
 ./install-cursor.sh
 ```
 
+### OpenClaw
+
+```bash
+git clone https://github.com/ccashwell/evm-cortex.git
+cd evm-cortex
+./install-openclaw.sh
+```
+
+Or zero-copy (add to `~/.openclaw/openclaw.json`):
+
+```json5
+{ "skills": { "load": { "extraDirs": ["/path/to/evm-cortex/skills"] } } }
+```
+
 ## Prerequisites
 
 | Tool | Install | Required |
