@@ -1,0 +1,32 @@
+# Source files (pre-built dist is included)
+hooks/src/
+hooks/node_modules/
+hooks/package.json
+hooks/package-lock.json
+hooks/tsconfig.json
+hooks/vitest.config.ts
+
+# Development
+.github/
+.claude/
+.cursor/
+.codex/
+.opencode/
+assets/tapes/
+*.tape
+
+# Documentation (README is included via npm default)
+docs/README_*.md
+ARCHITECTURE.md
+CODE_OF_CONDUCT.md
+CONTRIBUTING.md
+UPGRADING.md
+
+# Build artifacts
+*.db
+*.sqlite
+*.log
+.DS_Store
+*.bak
+*.backup
+node_modules/

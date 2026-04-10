@@ -1,0 +1,21 @@
+{
+  "name": "evm-cortex",
+  "description": "Ethereum protocol engineering squad for Solidity development, security auditing, DeFi integration, and smart contract testing with Foundry",
+  "version": "1.0.0",
+  "author": {
+    "name": "ccashwell",
+    "url": "https://github.com/ccashwell"
+  },
+  "repository": "https://github.com/ccashwell/evm-cortex",
+  "license": "MIT",
+  "keywords": [
+    "ethereum",
+    "solidity",
+    "smart-contracts",
+    "defi",
+    "security-audit",
+    "foundry",
+    "evm",
+    "claude-code"
+  ]
+}

@@ -1,0 +1,27 @@
+name: Claude Code Fix
+on:
+  issues:
+    types: [labeled]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  claude-fix:
+    if: contains(github.event.label.name, 'claude-fix')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Claude Code Fix
+        uses: anthropics/claude-code-action@v1
+        env:
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          direct_prompt: |
+            Fix the issue described in environment variables ISSUE_TITLE and ISSUE_BODY.
+            Follow TDD workflow: write test first, then implement fix.
+            Create a PR with the fix.

@@ -1,0 +1,9 @@
+# EVM Cortex - OpenCode CLI configuration
+# https://github.com/ccashwell/evm-cortex
+
+[project]
+# OpenCode reads instructions from this file
+instructions_file = "AGENTS.md"
+
+[model]
+default = "anthropic/claude-sonnet-4-20250514"

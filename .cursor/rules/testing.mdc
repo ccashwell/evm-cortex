@@ -1,0 +1,52 @@
+# Foundry Testing Standards
+
+## TDD Workflow
+1. Write test first (RED) -- test must fail
+2. Write minimal implementation (GREEN) -- test must pass
+3. Refactor and optimize (IMPROVE)
+4. Run `forge snapshot` to baseline gas
+5. Target 90%+ coverage on critical paths
+
+## Test File Structure
+```
+test/
+  unit/           # Unit tests per contract
+  integration/    # Cross-contract interaction tests
+  invariant/      # Stateful invariant tests
+  fork/           # Fork tests against live protocols
+  poc/            # Proof-of-concept exploit tests
+```
+
+## Naming Conventions
+- Unit tests: `test_FunctionName_Condition_ExpectedResult`
+- Revert tests: `test_RevertWhen_Condition`
+- Fuzz tests: `testFuzz_FunctionName_PropertyDescription`
+- Invariant tests: `invariant_PropertyDescription`
+- Fork tests: `testFork_ScenarioDescription`
+
+## Test Quality Rules
+- Every public/external function must have at least one test
+- Test happy path AND failure cases
+- Test edge cases: 0, 1, type(uint256).max, empty arrays
+- Fuzz test ALL math operations (min 10,000 runs)
+- Fork-test ALL external protocol integrations
+- First depositor / last withdrawer scenarios for vaults
+- Invariant tests for core protocol properties
+
+## Cheatcode Usage
+- `vm.prank(addr)` for single-call impersonation
+- `vm.startPrank(addr)` / `vm.stopPrank()` for multi-call
+- `deal(token, addr, amount)` for token balances
+- `vm.warp(ts)` and `vm.roll(bn)` for time/block
+- `vm.expectRevert(Error.selector)` for revert tests
+- `vm.expectEmit()` for event verification
+- `vm.assume()` / `vm.bound()` for fuzz input constraints
+- `makeAddr("name")` for labeled test addresses
+
+## CI Integration
+```bash
+forge test --gas-report    # All tests + gas
+forge snapshot --check     # Gas regression check
+forge coverage             # Coverage report
+slither .                  # Static analysis
+```

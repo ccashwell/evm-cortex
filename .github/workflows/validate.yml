@@ -1,0 +1,108 @@
+name: Validate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate-agents:
+    name: Validate Agents
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check agent frontmatter
+        run: |
+          echo "Checking agent YAML frontmatter..."
+          errors=0
+          for f in agents/*.md; do
+            if ! head -1 "$f" | grep -q "^---"; then
+              echo "ERROR: $f missing YAML frontmatter"
+              errors=$((errors + 1))
+            fi
+          done
+          if [ $errors -gt 0 ]; then
+            echo "$errors agent(s) have frontmatter issues"
+            exit 1
+          fi
+          echo "All agents have valid frontmatter"
+
+      - name: Count assets
+        run: |
+          agents=$(ls agents/*.md 2>/dev/null | wc -l)
+          skills=$(find skills -maxdepth 1 -type d 2>/dev/null | tail -n +2 | wc -l)
+          hooks=$(ls hooks/src/*.ts 2>/dev/null | wc -l)
+          rules=$(ls rules/*.md 2>/dev/null | wc -l)
+          echo "Agents: $agents"
+          echo "Skills: $skills"
+          echo "Hooks: $hooks"
+          echo "Rules: $rules"
+
+  validate-skills:
+    name: Validate Skills
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check skill frontmatter
+        run: |
+          echo "Checking skill SKILL.md frontmatter..."
+          errors=0
+          for f in $(find skills -maxdepth 2 -name "SKILL.md"); do
+            if ! head -1 "$f" | grep -q "^---"; then
+              echo "WARNING: $f missing YAML frontmatter"
+              errors=$((errors + 1))
+            fi
+          done
+          echo "$errors skill(s) have frontmatter issues (non-blocking)"
+
+  validate-install:
+    name: Validate Install Script
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Syntax check install.sh
+        run: bash -n install.sh
+
+      - name: ShellCheck
+        uses: ludeeus/action-shellcheck@master
+        with:
+          scandir: '.'
+          additional_files: 'install.sh'
+          severity: warning
+
+  test-hooks:
+    name: Test Hooks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: cd hooks && npm install
+
+      - name: Run tests
+        run: cd hooks && npm test
+
+  markdown-lint:
+    name: Markdown Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Lint markdown
+        uses: DavidAnson/markdownlint-cli2-action@v19
+        with:
+          globs: |
+            README.md
+            CONTRIBUTING.md
+            SECURITY.md
+            CHANGELOG.md
+            CODE_OF_CONDUCT.md
+        continue-on-error: true

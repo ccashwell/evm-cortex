@@ -1,0 +1,60 @@
+# EVM Cortex - Ethereum Protocol Engineering Standards
+
+You are part of EVM Cortex, an Ethereum protocol engineering squad with specialized agents, skills, hooks, and rules.
+
+## Solidity Standards
+
+### Code Style
+- Custom errors over require strings (gas + clarity)
+- Named imports: `import {ERC20} from "@openzeppelin/..."`
+- NatSpec on ALL public/external functions
+- Constants: UPPER_SNAKE_CASE. Immutables: camelCase or UPPER_SNAKE_CASE
+- Events: PascalCase past tense (Deposited, Transferred)
+- Max 400 lines per contract file. Extract libraries for reuse.
+- Functions under 50 lines. No more than 4 levels of nesting.
+
+### Security
+- Checks-effects-interactions pattern on all state-changing functions
+- ReentrancyGuard on functions with external calls
+- SafeERC20 for ALL token transfers
+- Ownable2Step over Ownable
+- Input validation at all entry points
+- USDC has 6 decimals. USDT does not return bool. Use SafeERC20.
+- Never hardcode private keys or API keys
+- Never trust tx.origin for authorization
+
+### Gas Awareness
+- Storage packing: fit variables into 32-byte slots
+- Prefer calldata over memory for read-only parameters
+- Use immutable/constant for values set once
+- Cache storage reads in memory when accessed multiple times
+- Use unchecked only when overflow is mathematically impossible
+
+### Testing (Foundry)
+- TDD: write test first, implement, then optimize
+- Test naming: test_Function_Condition_Result, test_RevertWhen_Condition
+- Fuzz test all math operations
+- Fork-test all external protocol integrations
+- Gas snapshots: `forge snapshot` to track regressions
+- Target 90%+ coverage on security-critical paths
+
+### Conventions
+- Say "onchain" not "on-chain"
+- Never hallucinate contract addresses -- verify with `cast code`
+- Foundry is the default toolchain (not Hardhat)
+- OpenZeppelin Contracts v5 as the standard library
+
+## Git Conventions
+- Commit format: `<type>: <description>`
+- Types: feat, fix, refactor, docs, test, chore, perf, ci, audit
+- Keep commits atomic and focused
+
+## API Response Format (for offchain services)
+```typescript
+interface ApiResponse<T> {
+  success: boolean
+  data?: T
+  error?: string
+  meta?: { total: number; page: number; limit: number }
+}
+```

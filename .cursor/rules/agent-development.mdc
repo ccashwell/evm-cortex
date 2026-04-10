@@ -1,0 +1,39 @@
+# Agent Development Rules
+
+## Agent File Format
+
+Each agent is a Markdown file with YAML frontmatter:
+
+```yaml
+---
+name: agent-name
+description: One-line description of what the agent does
+model: opus or sonnet
+tools: [Read, Write, Bash, Grep, Glob]
+---
+```
+
+Followed by the agent's system prompt in Markdown.
+
+## Naming Conventions
+- Filename: `kebab-case.md` (e.g., `gas-optimizer.md`)
+- Name field: same as filename without extension
+- Description: starts with domain-specific role
+
+## Agent Categories
+- Core Dev: solidity-architect, solidity-engineer, gas-optimizer, contract-deployer
+- Security: audit-orchestrator, depth-state-trace, depth-token-flow, depth-edge-case, depth-external
+- Testing: foundry-tester, invariant-tester, formal-verifier, fuzzer, poc-writer
+- DeFi: defi-architect, amm-expert, lending-expert, oracle-expert
+- Tooling: foundry-expert, openzeppelin-expert, slither-analyst
+- Standards: eip-expert, erc-implementer, upgrade-planner, governance-designer
+
+## Quality Rules
+- Every agent must have deep Ethereum/Solidity expertise
+- Include specific tool references (Foundry, Slither, Cast)
+- Include actionable methodology, not just knowledge
+- Reference specific EIPs, ERCs, and standards
+- Cross-reference relevant skills
+- Use "onchain" not "on-chain"
+
+Consider these rules if they affect your changes.

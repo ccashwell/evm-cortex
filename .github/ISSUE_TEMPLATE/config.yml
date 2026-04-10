@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/ccashwell/evm-cortex/blob/main/SECURITY.md
+    about: Report security vulnerabilities privately (do NOT open a public issue)

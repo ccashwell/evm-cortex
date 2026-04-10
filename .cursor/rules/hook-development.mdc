@@ -1,0 +1,38 @@
+# Hook Development Rules
+
+## Hook Architecture
+
+Hooks are TypeScript files compiled to ESM bundles (.mjs) via esbuild.
+
+Source: `hooks/src/*.ts`
+Built: `hooks/dist/*.mjs`
+Shared: `hooks/src/shared/*.ts`
+
+## When to Create Hooks
+
+Hooks automate actions around agent events:
+- Pre/post edit actions (run forge build, slither)
+- Session lifecycle (start, end, compact)
+- Memory and learning operations
+- Security scanning (credential detection, SAST)
+
+## EVM-Specific Hook Patterns
+- `forge-compile-check`: Run `forge build` after .sol file edits
+- `slither-on-save`: Run Slither after Solidity changes
+- `gas-snapshot-diff`: Compare forge snapshots after edits
+- `natspec-enforcer`: Check NatSpec on public/external functions
+- `storage-layout-check`: Validate storage layout for proxy contracts
+
+## Quality Rules
+- Hooks must be fast (< 5 second execution)
+- Never block on long-running operations
+- Handle errors gracefully (log and continue)
+- Keep hooks focused on one responsibility
+- Use shared utilities from `hooks/src/shared/`
+
+## Build
+```bash
+cd hooks && npm run build
+```
+
+Consider these rules if they affect your changes.

@@ -1,0 +1,47 @@
+# Skill Development Rules
+
+## Skill Directory Structure
+
+Each skill lives in its own directory under `skills/`:
+
+```
+skills/
+  gas-optimization/
+    SKILL.md      # Skill metadata + content
+```
+
+## SKILL.md Format
+
+```yaml
+---
+name: skill-name
+description: When and why to use this skill. Used for auto-discovery.
+---
+```
+
+Followed by the skill content in Markdown.
+
+## Naming Conventions
+- Directory name: `kebab-case` (e.g., `gas-optimization`)
+- SKILL.md name field: same as directory name
+- Description: explains WHEN to trigger in Ethereum context
+
+## Quality Rules
+- Content must be Ethereum/Solidity specific
+- Include Solidity code examples where applicable
+- Include checklists for complex patterns
+- Reference specific EIPs, ERCs, and tools
+- Cross-reference related skills
+- Use "onchain" not "on-chain"
+
+## Skill Categories
+- Solidity Development: patterns, gas, storage, assembly
+- Security: vulnerability patterns, attack vectors, defenses
+- DeFi: protocol integration, AMMs, lending, oracles
+- Testing: Foundry testing, fuzzing, invariants, formal verification
+- Audit: pipeline phases (prep, recon, breadth, depth, verify, report)
+- Standards: ERC implementations, proxy patterns
+- Tooling: Foundry, Slither, Cast, Anvil
+- Infrastructure: subgraphs, frontends, L2, deployment
+
+Consider these rules if they affect your changes.

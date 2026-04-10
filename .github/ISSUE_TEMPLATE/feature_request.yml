@@ -1,0 +1,54 @@
+name: Feature Request
+description: Suggest an idea for evm-cortex
+title: "[FEAT] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Have an idea? We'd love to hear it.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: A clear description of the problem or need.
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: How do you think this should work?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Any other approaches you've thought about.
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - Agent (new role)
+        - Skill (new knowledge)
+        - Hook (new sensor)
+        - Rule (behavioral guideline)
+        - CLI
+        - Documentation
+        - Other
+
+  - type: dropdown
+    id: effort
+    attributes:
+      label: Estimated effort
+      options:
+        - Small (1-2 files)
+        - Medium (3-10 files)
+        - Large (new feature/system)
+        - Not sure

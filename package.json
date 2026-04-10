@@ -1,0 +1,46 @@
+{
+  "name": "evm-cortex",
+  "version": "1.0.0",
+  "description": "Ethereum protocol engineering squad for Solidity development, security auditing, DeFi, and smart contract testing",
+  "type": "module",
+  "bin": {
+    "evm-cortex": "./bin/cli.mjs"
+  },
+  "files": [
+    "agents/",
+    "skills/",
+    "hooks/dist/",
+    "hooks/hooks.json",
+    "rules/",
+    "plugin.json",
+    "bin/",
+    "install.sh",
+    "CLAUDE.md",
+    "AGENTS.md"
+  ],
+  "keywords": [
+    "ethereum",
+    "solidity",
+    "smart-contracts",
+    "defi",
+    "security-audit",
+    "foundry",
+    "evm",
+    "claude-code",
+    "ai-agents",
+    "web3"
+  ],
+  "author": "ccashwell (https://github.com/ccashwell)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ccashwell/evm-cortex.git"
+  },
+  "homepage": "https://github.com/ccashwell/evm-cortex#readme",
+  "bugs": {
+    "url": "https://github.com/ccashwell/evm-cortex/issues"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
