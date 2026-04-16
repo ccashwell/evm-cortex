@@ -1,6 +1,6 @@
 {
   "name": "evm-cortex",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Ethereum protocol engineering squad for Solidity development, security auditing, DeFi, and smart contract testing",
   "type": "module",
   "bin": {
