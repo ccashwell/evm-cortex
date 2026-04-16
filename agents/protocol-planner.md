@@ -1,5 +1,5 @@
 ---
-name: planner
+name: protocol-planner
 description: Protocol development planning specialist — task decomposition, dependency analysis, deployment sequencing
 model: opus
 tools: [Read, Bash, Grep, Glob, Write]
