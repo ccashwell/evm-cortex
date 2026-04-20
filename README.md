@@ -4,7 +4,7 @@
 
 Ethereum protocol engineering squad for AI coding assistants.
 
-50 agents, 90 skills, 19 hooks, and 15 rules covering Solidity development, security auditing, DeFi integration, smart contract testing, and deployment — everything needed to build, audit, and ship smart contracts.
+50 agents, 91 skills, 19 hooks, and 15 rules covering Solidity development, security auditing, DeFi integration, smart contract testing, and deployment — everything needed to build, audit, and ship smart contracts.
 
 ## Install
 
@@ -70,11 +70,11 @@ Or zero-copy (add to `~/.openclaw/openclaw.json`):
 | Standards (5) | `eip-expert` `erc-implementer` `upgrade-planner` `governance-designer` `l2-specialist` |
 | Cross-Cutting (5) | `planner` `code-reviewer` `scout` `scribe` `verifier` |
 
-### 90 Skills
+### 91 Skills
 
 | Category | Skills |
 |----------|--------|
-| Solidity Dev (12) | `solidity-patterns` `gas-optimization` `storage-layout` `assembly-patterns` `error-handling` `event-design` `interface-design` `natspec-standards` `library-patterns` `immutable-constants` `constructor-patterns` `solidity-security` |
+| Solidity Dev (13) | `solidity-patterns` `type-driven-design` `gas-optimization` `storage-layout` `assembly-patterns` `error-handling` `event-design` `interface-design` `natspec-standards` `library-patterns` `immutable-constants` `constructor-patterns` `solidity-security` |
 | Security (15) | `reentrancy-patterns` `flash-loan-attacks` `oracle-manipulation` `access-control-patterns` `signature-vulnerabilities` `front-running-patterns` `integer-overflow` `delegate-call-risks` `denial-of-service` `cross-chain-security` `upgrade-safety` `token-integration-safety` `economic-attack-vectors` `governance-attacks` `time-manipulation` |
 | DeFi (12) | `uniswap-v4-hooks` `aave-integration` `compound-patterns` `curve-integration` `chainlink-oracles` `flash-loan-usage` `yield-vault-patterns` `staking-reward-patterns` `governance-patterns` `liquidity-mining` `token-bonding-curves` `dutch-auction-patterns` |
 | Uniswap (6) | `uniswap-v4-testing` `uniswap-v4-expert` `uniswap-v3-expert` `uniswap-math` `lp-analyst` `pool-finder` |
