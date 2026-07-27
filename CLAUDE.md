@@ -41,6 +41,7 @@ Route tasks to the most specific agent available. When multiple agents could han
 | Invariant tests | invariant-tester | sonnet |
 | Formal verification | formal-verifier | opus |
 | Echidna/Medusa fuzzing | fuzzer | sonnet |
+| Full fuzz suite generation | `fizz` skill | sonnet |
 | Exploit PoC writing | poc-writer | opus |
 
 ### DeFi Tasks
@@ -111,11 +112,14 @@ Full analysis with PoC verification for Medium+ findings. Mix of opus and sonnet
 ### Thorough Mode (~40 agents)
 Complete audit with invariant fuzzing, formal properties, multi-iteration depth analysis, and skeptic review for High/Critical findings.
 
-### Pashov 8-Agent Pipeline
-For comprehensive security review, use the `pashov-audit-pipeline` skill which runs 8 specialized agents in parallel: vector scan, math precision, access control, economic security, execution trace, invariant, periphery, and first principles.
+### Pashov 12-Agent Pipeline
+For comprehensive security review, use the `pashov-audit-pipeline` skill which runs 12 specialized attacker agents in parallel. Nine work a single lens — math precision, access control, economic security, execution trace, invariant, periphery, first principles, asymmetry, boundary — and three are gap-hunters (numerical, trust, flow) that report only bugs living at the seam between lenses. Findings are deduplicated, run through four judging gates, confidence-scored, and severity-classified with PoCs for Critical/High.
 
 ### Pre-Audit Reconnaissance
-Use the `xray-pre-audit` skill to generate a structured pre-audit report (threat model, invariants, entry points, git analysis) before diving into line-by-line review.
+Use the `xray-pre-audit` skill to generate a structured pre-audit report (threat model, invariants, entry points, git analysis) before diving into line-by-line review. Its `x-ray.md` output is the best context package for both `pashov-audit-pipeline` and `fizz`.
+
+### Stateful Fuzzing
+Use the `fizz` skill to generate a full Echidna/Medusa invariant suite for a Foundry or Hardhat project — handlers, ghost variables, properties in plain English (`PROPERTIES.md`), coverage iteration, and Foundry reproduction tests for each violation. Use `fizz-sync` after source changes rather than regenerating, and `fizz-convert` to turn English properties into Solidity.
 
 ### Audit Phases
 1. **Recon** — X-Ray pre-audit, scope, dependencies, architecture mapping, automated tools (Slither, Aderyn)
@@ -190,6 +194,7 @@ When a task matches a specific domain, load the relevant skill from `skills/`:
 | Uniswap V3 | uniswap-v3-expert, uniswap-math, pool-finder, lp-analyst |
 | LP & AMM | lp-analyst, uniswap-math, pool-finder |
 | Testing | foundry-testing, invariant-testing, fork-testing, fuzzing-patterns, uniswap-v4-testing |
+| Stateful fuzzing | fizz, fizz-sync, fizz-convert, invariant-testing, fuzzing-patterns |
 | Stablecoin | usdc-integration, cctp-bridging |
 | Auditing | pashov-audit-pipeline, xray-pre-audit, audit-prep, audit-recon, audit-breadth-scan, audit-depth-analysis |
 | Token standards | erc20-patterns, erc721-patterns, erc4626-patterns, proxy-patterns |

@@ -4,7 +4,7 @@
 
 Ethereum protocol engineering squad for AI coding assistants.
 
-50 agents, 91 skills, 19 hooks, and 15 rules covering Solidity development, security auditing, DeFi integration, smart contract testing, and deployment — everything needed to build, audit, and ship smart contracts.
+50 agents, 94 skills, 19 hooks, and 15 rules covering Solidity development, security auditing, DeFi integration, smart contract testing, and deployment — everything needed to build, audit, and ship smart contracts.
 
 ## Install
 
@@ -53,7 +53,11 @@ Or zero-copy (add to `~/.openclaw/openclaw.json`):
 | Foundry | `curl -L https://foundry.paradigm.xyz \| bash && foundryup` | Yes |
 | Slither | `pip install slither-analyzer` | Recommended |
 | Aderyn | `cargo install aderyn` | Optional |
-| Node.js 18+ | [nodejs.org](https://nodejs.org) | For hooks |
+| Node.js 18+ | [nodejs.org](https://nodejs.org) | For hooks and `fizz` |
+| Medusa | [install guide](https://secure-contracts.com/program-analysis/medusa/docs/src/getting_started/installation.html) | For `fizz` |
+| Echidna | [install guide](https://secure-contracts.com/program-analysis/echidna/introduction/installation.html) | For `fizz` |
+
+`fizz` stops early without Medusa, since it drives the coverage loop. Echidna is optional for a first run but expected for the full workflow — it gives a complementary second campaign over the same harness.
 
 ## What's Inside
 
@@ -70,7 +74,7 @@ Or zero-copy (add to `~/.openclaw/openclaw.json`):
 | Standards (5) | `eip-expert` `erc-implementer` `upgrade-planner` `governance-designer` `l2-specialist` |
 | Cross-Cutting (5) | `planner` `code-reviewer` `scout` `scribe` `verifier` |
 
-### 91 Skills
+### 94 Skills
 
 | Category | Skills |
 |----------|--------|
@@ -78,7 +82,7 @@ Or zero-copy (add to `~/.openclaw/openclaw.json`):
 | Security (15) | `reentrancy-patterns` `flash-loan-attacks` `oracle-manipulation` `access-control-patterns` `signature-vulnerabilities` `front-running-patterns` `integer-overflow` `delegate-call-risks` `denial-of-service` `cross-chain-security` `upgrade-safety` `token-integration-safety` `economic-attack-vectors` `governance-attacks` `time-manipulation` |
 | DeFi (12) | `uniswap-v4-hooks` `aave-integration` `compound-patterns` `curve-integration` `chainlink-oracles` `flash-loan-usage` `yield-vault-patterns` `staking-reward-patterns` `governance-patterns` `liquidity-mining` `token-bonding-curves` `dutch-auction-patterns` |
 | Uniswap (6) | `uniswap-v4-testing` `uniswap-v4-expert` `uniswap-v3-expert` `uniswap-math` `lp-analyst` `pool-finder` |
-| Testing (8) | `foundry-testing` `invariant-testing` `formal-verification` `fork-testing` `gas-snapshot-testing` `coverage-analysis` `fuzzing-patterns` `test-fixtures` |
+| Testing (11) | `foundry-testing` `invariant-testing` `formal-verification` `fork-testing` `gas-snapshot-testing` `coverage-analysis` `fuzzing-patterns` `test-fixtures` `fizz` `fizz-sync` `fizz-convert` |
 | Audit (8) | `audit-prep` `audit-recon` `audit-breadth-scan` `audit-depth-analysis` `audit-verification` `audit-report-generation` `pashov-audit-pipeline` `xray-pre-audit` |
 | Standards (12) | `erc20-patterns` `erc721-patterns` `erc1155-patterns` `erc4626-patterns` `erc7702-patterns` `erc8004-patterns` `eip712-signing` `create2-patterns` `proxy-patterns` `minimal-proxy` `diamond-pattern` `beacon-proxy` |
 | Stablecoins (2) | `usdc-integration` `cctp-bridging` |
@@ -140,7 +144,7 @@ Built on knowledge from:
 - [OpenZeppelin Skills](https://github.com/OpenZeppelin/openzeppelin-skills) — Secure contract development
 - [evmresearch.io](https://evmresearch.io) — EVM security research
 - [Circle Skills](https://github.com/circlefin/skills) — USDC and CCTP integration patterns
-- [Pashov Skills](https://github.com/pashov/skills) — Security audit methodology
+- [Pashov Skills](https://github.com/pashov/skills) — Audit methodology and fuzz suite generation (`pashov-audit-pipeline`, `xray-pre-audit`, and `fizz` vendor upstream code directly)
 
 ## License
 

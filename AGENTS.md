@@ -119,7 +119,7 @@ TDD with Foundry: write test first (RED), implement (GREEN), optimize. `forge sn
 Gas is under 1 gwei in 2026. Mainnet is cheap. But still optimize: storage packing, calldata over memory, custom errors, immutables.
 
 ### Audit Mindset
-Write code as if it will be audited tomorrow. Document invariants. Test edge cases (0, 1, max, empty). Use `xray-pre-audit` for reconnaissance and `pashov-audit-pipeline` for the full 8-agent parallelized audit.
+Write code as if it will be audited tomorrow. Document invariants. Test edge cases (0, 1, max, empty). Use `xray-pre-audit` for reconnaissance, `pashov-audit-pipeline` for the full 12-agent parallelized audit, and `fizz` to generate an Echidna/Medusa invariant suite.
 
 ### Conventions
 - Say "onchain" not "on-chain"
