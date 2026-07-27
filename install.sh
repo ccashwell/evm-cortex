@@ -9,20 +9,28 @@ REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 CLAUDE_DIR="$HOME/.claude"
 FORCE=false
 ADDED=0
-SKIPPED=0
+CURRENT=0
+OUTDATED=0
+OUTDATED_LIST=""
 
 for arg in "$@"; do
   case $arg in
-    --force) FORCE=true ;;
+    --force|--update) FORCE=true ;;
     --non-interactive) NON_INTERACTIVE=true ;;
     --help|-h)
-      echo "Usage: ./install.sh [--force] [--non-interactive]"
+      echo "Usage: ./install.sh [--update|--force] [--non-interactive]"
       echo ""
-      echo "  --force            Overwrite existing files (default: skip existing)"
+      echo "  --update, --force  Replace EVM Cortex files with this version"
       echo "  --non-interactive  Skip confirmation prompt"
       echo ""
-      echo "Without --force, only NEW files are added. Your existing agents,"
-      echo "skills, hooks, and rules are preserved."
+      echo "UPGRADING an existing install requires --update. The default mode only"
+      echo "adds NEW files; it never modifies a file that already exists, so it will"
+      echo "not pick up changes to agents, skills, hooks, or rules you already have."
+      echo "The default mode reports which of your files are out of date."
+      echo ""
+      echo "--update backs up ~/.claude/{agents,skills,hooks,rules} first, then"
+      echo "replaces only the files EVM Cortex ships. Agents and skills you created"
+      echo "yourself are never touched."
       exit 0
       ;;
   esac
@@ -45,9 +53,11 @@ echo "  - $HOOK_COUNT hooks   -> ~/.claude/hooks/"
 echo "  - $RULE_COUNT rules   -> ~/.claude/rules/"
 echo ""
 if [ "$FORCE" = true ]; then
-  echo "Mode: OVERWRITE (--force) — existing files will be replaced"
+  echo "Mode: UPDATE — EVM Cortex files will be replaced with this version"
 else
-  echo "Mode: MERGE (default) — existing files will be preserved"
+  echo "Mode: ADD-ONLY (default) — only new files are installed"
+  echo "      Existing files are left as-is, even if this version changed them."
+  echo "      Upgrading an existing install? Use --update."
 fi
 echo ""
 
@@ -86,25 +96,56 @@ if [ "$FORCE" = true ]; then
   fi
 fi
 
+# True when dest exists but its contents differ from src — i.e. the installed
+# copy is either an older EVM Cortex version or a local edit. Either way the
+# default mode leaves it alone, but it must be REPORTED rather than counted as
+# "skipped", so an upgrade cannot silently no-op.
+differs() {
+  local src="$1" dest="$2"
+  if [ -d "$src" ]; then
+    ! diff -rq "$src" "$dest" >/dev/null 2>&1
+  else
+    ! diff -q "$src" "$dest" >/dev/null 2>&1
+  fi
+}
+
+record_outdated() {
+  OUTDATED=$((OUTDATED + 1))
+  OUTDATED_LIST="${OUTDATED_LIST}    $1"$'\n'
+}
+
 smart_copy_file() {
   local src="$1"
   local dest="$2"
-  if [ "$FORCE" = true ] || [ ! -e "$dest" ]; then
+  if [ ! -e "$dest" ]; then
+    cp "$src" "$dest"
+    ADDED=$((ADDED + 1))
+  elif ! differs "$src" "$dest"; then
+    CURRENT=$((CURRENT + 1))
+  elif [ "$FORCE" = true ]; then
     cp "$src" "$dest"
     ADDED=$((ADDED + 1))
   else
-    SKIPPED=$((SKIPPED + 1))
+    record_outdated "${dest#$CLAUDE_DIR/}"
   fi
 }
 
 smart_copy_dir() {
   local src="$1"
   local dest="$2"
-  if [ "$FORCE" = true ] || [ ! -e "$dest" ]; then
+  if [ ! -e "$dest" ]; then
+    cp -r "$src" "$dest"
+    ADDED=$((ADDED + 1))
+  elif ! differs "$src" "$dest"; then
+    CURRENT=$((CURRENT + 1))
+  elif [ "$FORCE" = true ]; then
+    # Replace rather than merge: a merge would leave behind files this version
+    # no longer ships, which is how a restructured skill ends up half-migrated.
+    rm -rf "$dest"
     cp -r "$src" "$dest"
     ADDED=$((ADDED + 1))
   else
-    SKIPPED=$((SKIPPED + 1))
+    record_outdated "${dest#$CLAUDE_DIR/}"
   fi
 }
 
@@ -173,19 +214,38 @@ if [ -d "$REPO_DIR/.github/workflows" ]; then
 fi
 
 echo ""
-echo "Installation complete!"
-echo "  Added:   $ADDED files"
-echo "  Skipped: $SKIPPED files (already existed)"
+if [ "$FORCE" = true ]; then
+  echo "Update complete!"
+  echo "  Written:  $ADDED"
+  echo "  Already current: $CURRENT"
+else
+  echo "Installation complete!"
+  echo "  Added:           $ADDED (new)"
+  echo "  Already current: $CURRENT"
+  echo "  OUT OF DATE:     $OUTDATED (left unchanged)"
+fi
 echo ""
 echo "  Agents: $(ls "$CLAUDE_DIR/agents/"*.md 2>/dev/null | wc -l | tr -d ' ')"
 echo "  Skills: $(find "$CLAUDE_DIR/skills/" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')"
 echo "  Hooks:  ${HOOK_COUNT:-$(ls "$CLAUDE_DIR/hooks/dist/"*.mjs 2>/dev/null | wc -l | tr -d ' ')}"
 echo "  Rules:  $(ls "$CLAUDE_DIR/rules/"*.md 2>/dev/null | wc -l | tr -d ' ')"
 echo ""
-if [ $SKIPPED -gt 0 ]; then
-  echo "Tip: Use ./install.sh --force to overwrite existing files."
+if [ $OUTDATED -gt 0 ]; then
+  echo "=============================================================="
+  echo "  $OUTDATED file(s) on disk differ from this version and were"
+  echo "  NOT updated. You are still running the older copies:"
+  echo ""
+  printf "%s" "$OUTDATED_LIST"
+  echo ""
+  echo "  To replace them with this version (backup taken first):"
+  echo ""
+  echo "      ./install.sh --update"
+  echo ""
+  echo "  If you intentionally customized any of the above, copy your"
+  echo "  changes aside first — --update overwrites them."
+  echo "=============================================================="
+  echo ""
 fi
-echo ""
 echo "Recommended MCP servers for EVM Cortex:"
 echo "  - OpenZeppelin MCP: https://mcp.openzeppelin.com/"
 echo "  - Blockscout MCP: for onchain data queries"

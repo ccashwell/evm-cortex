@@ -46,6 +46,18 @@ Or zero-copy (add to `~/.openclaw/openclaw.json`):
 { "skills": { "load": { "extraDirs": ["/path/to/evm-cortex/skills"] } } }
 ```
 
+## Updating
+
+```bash
+cd evm-cortex
+git pull origin main
+./install.sh --update
+```
+
+`--update` is required. Without it the installer only adds files you don't have yet and leaves everything else at its installed version, so an upgrade would bring in new skills but not changes to existing ones. Running without it is still safe and will tell you which of your files are out of date.
+
+`--update` backs up `~/.claude/{agents,skills,hooks,rules}` first and replaces only the files EVM Cortex ships — agents and skills you created yourself are untouched. See [UPGRADING.md](./UPGRADING.md) for details.
+
 ## Prerequisites
 
 | Tool | Install | Required |

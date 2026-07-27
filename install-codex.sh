@@ -2,7 +2,7 @@
 # EVM Cortex installer for Codex CLI
 # Copies skills to ~/.codex/skills/ where Codex auto-discovers them
 #
-# Usage: ./install-codex.sh [--force]
+# Usage: ./install-codex.sh [--update|--force]
 
 set -e
 
@@ -10,15 +10,20 @@ REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 CODEX_DIR="$HOME/.codex"
 FORCE=false
 ADDED=0
-SKIPPED=0
+CURRENT=0
+OUTDATED=0
+OUTDATED_LIST=""
 
 for arg in "$@"; do
   case $arg in
-    --force) FORCE=true ;;
+    --force|--update) FORCE=true ;;
     --help|-h)
-      echo "Usage: ./install-codex.sh [--force]"
+      echo "Usage: ./install-codex.sh [--update|--force]"
       echo ""
-      echo "  --force    Overwrite existing skills (default: skip existing)"
+      echo "  --update, --force  Replace existing skills with this version"
+      echo ""
+      echo "UPGRADING an existing install requires --update. The default mode only"
+      echo "adds NEW skills and reports which existing ones are out of date."
       echo ""
       echo "Installs EVM Cortex skills to ~/.codex/skills/"
       echo "for use with Codex CLI (OpenAI)."
@@ -69,11 +74,20 @@ for d in "$REPO_DIR/skills/"*/; do
   name=$(basename "$d")
   [ "$name" = "*" ] && continue
 
-  if [ "$FORCE" = true ] || [ ! -e "$CODEX_DIR/skills/$name" ]; then
-    cp -r "$d" "$CODEX_DIR/skills/$name"
+  dest="$CODEX_DIR/skills/$name"
+  if [ ! -e "$dest" ]; then
+    cp -r "$d" "$dest"
+    ADDED=$((ADDED + 1))
+  elif diff -rq "$d" "$dest" >/dev/null 2>&1; then
+    CURRENT=$((CURRENT + 1))
+  elif [ "$FORCE" = true ]; then
+    # Replace rather than merge, so files this version no longer ships are gone.
+    rm -rf "$dest"
+    cp -r "$d" "$dest"
     ADDED=$((ADDED + 1))
   else
-    SKIPPED=$((SKIPPED + 1))
+    OUTDATED=$((OUTDATED + 1))
+    OUTDATED_LIST="${OUTDATED_LIST}    $name"$'\n'
   fi
 done
 
@@ -84,9 +98,16 @@ if [ "$FORCE" = true ] || [ ! -e "$CODEX_DIR/AGENTS.md" ]; then
 fi
 
 echo ""
-echo "Installation complete!"
-echo "  Added:   $ADDED skills"
-echo "  Skipped: $SKIPPED skills (already existed)"
+if [ "$FORCE" = true ]; then
+  echo "Update complete!"
+  echo "  Written:         $ADDED skills"
+  echo "  Already current: $CURRENT"
+else
+  echo "Installation complete!"
+  echo "  Added:           $ADDED skills (new)"
+  echo "  Already current: $CURRENT"
+  echo "  OUT OF DATE:     $OUTDATED (left unchanged)"
+fi
 echo ""
 echo "  Total skills in ~/.codex/skills/: $(find "$CODEX_DIR/skills/" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')"
 echo ""
@@ -95,6 +116,15 @@ echo "  cd your-project"
 echo "  codex"
 echo '  > "use the coding-standards skill"'
 echo ""
-if [ $SKIPPED -gt 0 ]; then
-  echo "Tip: Use ./install-codex.sh --force to overwrite existing skills."
+if [ $OUTDATED -gt 0 ]; then
+  echo "=============================================================="
+  echo "  $OUTDATED skill(s) on disk differ from this version and were"
+  echo "  NOT updated. You are still running the older copies:"
+  echo ""
+  printf "%s" "$OUTDATED_LIST"
+  echo ""
+  echo "  To replace them with this version:"
+  echo ""
+  echo "      ./install-codex.sh --update"
+  echo "=============================================================="
 fi

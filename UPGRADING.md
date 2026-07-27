@@ -7,19 +7,35 @@ Guide for upgrading between EVM Cortex versions.
 ```bash
 cd evm-cortex
 git pull origin main
-./install.sh
+./install.sh --update
+```
+
+**`--update` is required.** Without it the installer runs in add-only mode: it installs skills and agents you don't have yet, but never modifies one that already exists. On an existing install that means an upgrade brings in *new* content only, and every skill, agent, hook, and rule you already had stays at its old version.
+
+Add-only mode now tells you when that happens — it lists every file on disk that differs from the version in the repo and prints the command to replace them. If you see an `OUT OF DATE` count, you have not finished upgrading.
+
+`--update` backs up `~/.claude/{agents,skills,hooks,rules}` to `~/.claude/backup-<timestamp>/` first, then replaces only the files EVM Cortex ships. Agents and skills you created yourself are never touched, because the installer iterates over repo content and never scans your directory for things to delete.
+
+Skill directories are **replaced rather than merged**, so a skill that was restructured upstream does not leave stale files behind. If you hand-edited a shipped skill, copy your version aside before updating — the backup has it, but the backup is easier to use if you know to look.
+
+The same applies to the other installers:
+
+```bash
+./install-codex.sh --update
+./install-openclaw.sh --update
+./install-cursor.sh /path/to/project --update
 ```
 
 ## File Categories
 
 ### Safe to Overwrite
 
-These files are maintained by EVM Cortex and should be overwritten during upgrades:
+These files are maintained by EVM Cortex and are what `--update` replaces:
 
 | Path | Content |
 |------|---------|
 | `agents/*.md` | Agent definitions |
-| `skills/*/SKILL.md` | Skill definitions |
+| `skills/*/` | Skill definitions, plus any `references/`, `scripts/`, and `templates/` a skill ships |
 | `hooks/src/*.ts` | Hook source code |
 | `hooks/dist/*.mjs` | Compiled hooks |
 | `rules/*.md` | Rule files |
@@ -46,6 +62,14 @@ These are user data:
 | Custom agents/skills | Any user-created agents or skills |
 
 ## Version History
+
+### Unreleased
+
+**Installers now support upgrading.** Previously the default mode skipped every existing file and reported the result as "Skipped: N (already existed)", which made an upgrade a silent no-op — the documented `git pull && ./install.sh` flow updated nothing. Default mode now distinguishes *already current* from *out of date*, lists the stale files, and points at `--update`. `install-cursor.sh` gained overwrite support, which it previously lacked entirely.
+
+**Pashov skills synced with upstream.** `pashov-audit-pipeline` moved to solidity-auditor v3 (8 agents to 12, attacker framing, four judging gates), `xray-pre-audit` to x-ray v2 (readiness report with cross-linked invariants), and `fizz` was added with its `fizz-sync` and `fizz-convert` companions for Echidna/Medusa suite generation. Skills total 94.
+
+These three skills now ship `references/`, `scripts/`, and `templates/` subdirectories alongside `SKILL.md`. An upgrade must therefore replace the whole skill directory, which is why `--update` replaces rather than merges.
 
 ### v1.0.0 (2026-04-10)
 

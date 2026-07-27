@@ -36,8 +36,10 @@ if ! command -v forge >/dev/null 2>&1; then
 fi
 
 # Clone or update
+IS_UPDATE=false
 if [ -d "$INSTALL_DIR" ]; then
   echo "Updating existing installation..."
+  IS_UPDATE=true
   git -C "$INSTALL_DIR" pull --ff-only 2>/dev/null || {
     echo "Pull failed, re-cloning..."
     rm -rf "$INSTALL_DIR"
@@ -50,9 +52,15 @@ fi
 
 echo ""
 
-# Run main installer
+# Run main installer. On an update the repo has moved on, so pass --update —
+# without it the installer only adds new files and leaves every existing agent,
+# skill, hook, and rule at its old version, making this path a silent no-op.
 cd "$INSTALL_DIR"
-bash install.sh --non-interactive
+if [ "$IS_UPDATE" = true ]; then
+  bash install.sh --non-interactive --update
+else
+  bash install.sh --non-interactive
+fi
 
 echo ""
 echo "Done! EVM Cortex is ready."

@@ -3,7 +3,7 @@
 # Copies skills to ~/.openclaw/skills/ (shared across all agents)
 # and sets up workspace bootstrap files
 #
-# Usage: ./install-openclaw.sh [--force] [--workspace-only] [--skills-only]
+# Usage: ./install-openclaw.sh [--update|--force] [--workspace-only] [--skills-only]
 
 set -e
 
@@ -14,17 +14,20 @@ FORCE=false
 SKILLS_ONLY=false
 WORKSPACE_ONLY=false
 ADDED=0
-SKIPPED=0
+CURRENT=0
+OUTDATED=0
+OUTDATED_LIST=""
 
 for arg in "$@"; do
   case $arg in
-    --force) FORCE=true ;;
+    --force|--update) FORCE=true ;;
     --skills-only) SKILLS_ONLY=true ;;
     --workspace-only) WORKSPACE_ONLY=true ;;
     --help|-h)
-      echo "Usage: ./install-openclaw.sh [--force] [--skills-only] [--workspace-only]"
+      echo "Usage: ./install-openclaw.sh [--update|--force] [--skills-only] [--workspace-only]"
       echo ""
-      echo "  --force           Overwrite existing files (default: skip existing)"
+      echo "  --update, --force Replace EVM Cortex files with this version"
+      echo "                    (required to upgrade an existing install)"
       echo "  --skills-only     Only install skills to ~/.openclaw/skills/"
       echo "  --workspace-only  Only install workspace bootstrap files"
       echo ""
@@ -73,9 +76,10 @@ fi
 echo ""
 
 if [ "$FORCE" = true ]; then
-  echo "Mode: OVERWRITE (--force)"
+  echo "Mode: UPDATE — EVM Cortex files will be replaced with this version"
 else
-  echo "Mode: MERGE (default) — existing files preserved"
+  echo "Mode: ADD-ONLY (default) — only new files are installed"
+  echo "      Upgrading an existing install? Use --update."
 fi
 echo ""
 
@@ -98,25 +102,53 @@ read -p "Continue? (y/N) " -n 1 -r
 echo
 [[ $REPLY =~ ^[Yy]$ ]] || exit 0
 
+# True when dest exists but differs from src — an older version or a local edit.
+# Default mode leaves it alone but REPORTS it, so an upgrade cannot silently no-op.
+differs() {
+  local src="$1" dest="$2"
+  if [ -d "$src" ]; then
+    ! diff -rq "$src" "$dest" >/dev/null 2>&1
+  else
+    ! diff -q "$src" "$dest" >/dev/null 2>&1
+  fi
+}
+
+record_outdated() {
+  OUTDATED=$((OUTDATED + 1))
+  OUTDATED_LIST="${OUTDATED_LIST}    $1"$'\n'
+}
+
 smart_copy_file() {
   local src="$1"
   local dest="$2"
-  if [ "$FORCE" = true ] || [ ! -e "$dest" ]; then
+  if [ ! -e "$dest" ]; then
+    cp "$src" "$dest"
+    ADDED=$((ADDED + 1))
+  elif ! differs "$src" "$dest"; then
+    CURRENT=$((CURRENT + 1))
+  elif [ "$FORCE" = true ]; then
     cp "$src" "$dest"
     ADDED=$((ADDED + 1))
   else
-    SKIPPED=$((SKIPPED + 1))
+    record_outdated "${dest#$OPENCLAW_DIR/}"
   fi
 }
 
 smart_copy_dir() {
   local src="$1"
   local dest="$2"
-  if [ "$FORCE" = true ] || [ ! -e "$dest" ]; then
+  if [ ! -e "$dest" ]; then
+    cp -r "$src" "$dest"
+    ADDED=$((ADDED + 1))
+  elif ! differs "$src" "$dest"; then
+    CURRENT=$((CURRENT + 1))
+  elif [ "$FORCE" = true ]; then
+    # Replace rather than merge, so files this version no longer ships are gone.
+    rm -rf "$dest"
     cp -r "$src" "$dest"
     ADDED=$((ADDED + 1))
   else
-    SKIPPED=$((SKIPPED + 1))
+    record_outdated "${dest#$OPENCLAW_DIR/}"
   fi
 }
 
@@ -178,16 +210,39 @@ if [ "$SKILLS_ONLY" != true ]; then
 TOOLSEOF
     ADDED=$((ADDED + 1))
   else
-    SKIPPED=$((SKIPPED + 1))
+    CURRENT=$((CURRENT + 1))
   fi
 fi
+
+
+print_outdated_notice() {
+  [ $OUTDATED -eq 0 ] && return 0
+  echo "=============================================================="
+  echo "  $OUTDATED file(s) on disk differ from this version and were"
+  echo "  NOT updated. You are still running the older copies:"
+  echo ""
+  printf "%s" "$OUTDATED_LIST"
+  echo ""
+  echo "  To replace them with this version:"
+  echo ""
+  echo "      ./install-openclaw.sh --update"
+  echo "=============================================================="
+  echo ""
+}
 
 INSTALLED_SKILLS=$(find "$OPENCLAW_DIR/skills/" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')
 
 echo ""
-echo "Installation complete!"
-echo "  Added:   $ADDED files"
-echo "  Skipped: $SKIPPED files (already existed)"
+if [ "$FORCE" = true ]; then
+  echo "Update complete!"
+  echo "  Written:         $ADDED"
+  echo "  Already current: $CURRENT"
+else
+  echo "Installation complete!"
+  echo "  Added:           $ADDED (new)"
+  echo "  Already current: $CURRENT"
+  echo "  OUT OF DATE:     $OUTDATED (left unchanged)"
+fi
 echo ""
 if [ "$WORKSPACE_ONLY" != true ]; then
   echo "  Skills in ~/.openclaw/skills/: $INSTALLED_SKILLS"
@@ -196,10 +251,7 @@ if [ "$SKILLS_ONLY" != true ]; then
   echo "  Workspace: $WORKSPACE_DIR"
 fi
 echo ""
-if [ $SKIPPED -gt 0 ]; then
-  echo "Tip: Use ./install-openclaw.sh --force to overwrite existing files."
-  echo ""
-fi
+print_outdated_notice
 echo "Usage:"
 echo "  openclaw agent --message \"audit this Solidity contract\""
 echo "  openclaw agent --message \"use the usdc-integration skill\""
