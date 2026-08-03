@@ -86,6 +86,26 @@ function afterDonate(address sender, PoolKey calldata key, uint256 amount0, uint
     external returns (bytes4);
 ```
 
+## API Compatibility Note
+
+The snippets below use the older `BaseHook` override style (`external override onlyPoolManager`).
+Current `v4-periphery` `BaseHook` marks the external callbacks **non-virtual** and applies
+`onlyPoolManager` itself — you override the `internal virtual` variants instead, and the
+param structs moved to `v4-core/src/types/PoolOperation.sol`:
+
+```solidity
+// current style — override the internal hook, no modifier needed
+import {SwapParams} from "v4-core/src/types/PoolOperation.sol";  // not IPoolManager.SwapParams
+
+function _beforeSwap(address sender, PoolKey calldata key, SwapParams calldata params, bytes calldata hookData)
+    internal override returns (bytes4, BeforeSwapDelta, uint24)
+{
+    return (BaseHook.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
+}
+```
+
+The logic in each pattern below is unaffected by which style you use.
+
 ## Hook Template
 
 ```solidity
@@ -98,7 +118,9 @@ import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
 import {BalanceDelta} from "v4-core/src/types/BalanceDelta.sol";
-import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "v4-core/src/types/BeforeSwapDelta.sol";
+import {BeforeSwapDelta, BeforeSwapDeltaLibrary, toBeforeSwapDelta} from "v4-core/src/types/BeforeSwapDelta.sol";
+import {Currency} from "v4-core/src/types/Currency.sol";
+import {SafeCast} from "v4-core/src/libraries/SafeCast.sol";
 
 contract MyHook is BaseHook {
     using PoolIdLibrary for PoolKey;
@@ -196,10 +218,24 @@ Pool must be created with `LPFeeLibrary.DYNAMIC_FEE_FLAG` as the fee in the Pool
 
 ## Hook Pattern: Access Control (KYC/Allowlist)
 
+> **`sender` is the caller of the PoolManager, not the end user.** For any swap routed
+> through periphery (`UniversalRouter`, `PoolSwapTest`, an aggregator), `sender` is the
+> **router address** — never the swapper. Gating on `allowed[sender]` therefore allowlists
+> *routers*: one allowlisted router lets the entire world swap, while allowlisted users
+> cannot swap at all unless they call the PoolManager directly.
+>
+> To gate the economic user you must (a) restrict `sender` to routers you trust to report
+> the user faithfully, and (b) read the user identity from `hookData`. `hookData` is
+> attacker-controlled on any other path, so it is only trustworthy behind (a).
+
 ```solidity
 contract AllowlistHook is BaseHook {
     mapping(address => bool) public allowed;
+    mapping(address => bool) public trustedRouter; // routers that faithfully encode the user
     address public admin;
+
+    error UntrustedRouter(address sender);
+    error NotAllowed(address user);
 
     function getHookPermissions() public pure override returns (Hooks.Permissions memory) {
         return Hooks.Permissions({
@@ -213,17 +249,27 @@ contract AllowlistHook is BaseHook {
         });
     }
 
-    function beforeSwap(address sender, PoolKey calldata, IPoolManager.SwapParams calldata, bytes calldata)
+    /// @notice Resolves the economic user behind a callback. Only a trusted router's
+    /// hookData may be believed; every other caller is treated as the user itself.
+    function _resolveUser(address sender, bytes calldata hookData) internal view returns (address) {
+        if (hookData.length == 0) return sender; // direct PoolManager caller: sender IS the user
+        if (!trustedRouter[sender]) revert UntrustedRouter(sender);
+        return abi.decode(hookData, (address));
+    }
+
+    function beforeSwap(address sender, PoolKey calldata, IPoolManager.SwapParams calldata, bytes calldata hookData)
         external view override onlyPoolManager returns (bytes4, BeforeSwapDelta, uint24)
     {
-        require(allowed[sender], "not allowed");
+        address user = _resolveUser(sender, hookData);
+        if (!allowed[user]) revert NotAllowed(user);
         return (this.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
     }
 
-    function beforeAddLiquidity(address sender, PoolKey calldata, IPoolManager.ModifyLiquidityParams calldata, bytes calldata)
+    function beforeAddLiquidity(address sender, PoolKey calldata, IPoolManager.ModifyLiquidityParams calldata, bytes calldata hookData)
         external view override onlyPoolManager returns (bytes4)
     {
-        require(allowed[sender], "not allowed");
+        address user = _resolveUser(sender, hookData);
+        if (!allowed[user]) revert NotAllowed(user);
         return this.beforeAddLiquidity.selector;
     }
 }
@@ -278,9 +324,27 @@ contract OracleHook is BaseHook {
 
 ## Hook Pattern: Hook-Collected Swap Fee (afterSwapReturnDelta)
 
+> **The `int128` returned by `afterSwap` always applies to the *unspecified* currency**,
+> which flips with both swap direction and exact-in/exact-out. Reading the output leg and
+> returning it as the fee charges the fee against the *other* token on exact-output swaps.
+>
+> | swap | specified | unspecified |
+> |---|---|---|
+> | exact input, zeroForOne | currency0 (in) | currency1 (out) |
+> | exact input, oneForZero | currency1 (in) | currency0 (out) |
+> | exact output, zeroForOne | currency1 (out) | currency0 (in) |
+> | exact output, oneForZero | currency0 (out) | currency1 (in) |
+>
+> The returned delta also **credits the hook inside the PoolManager — it is not a transfer**.
+> The hook must `take()` that credit in the same callback, or the currency's delta stays
+> nonzero and the whole swap reverts with `CurrencyNotSettled()`.
+
 ```solidity
 contract SwapFeeHook is BaseHook {
-    uint256 public constant HOOK_FEE_BPS = 10; // 0.10% hook fee
+    using SafeCast for uint256;
+
+    uint256 public constant HOOK_FEE_BPS = 10;    // 0.10% hook fee
+    uint256 public constant TOTAL_BPS = 10_000;
 
     function getHookPermissions() public pure override returns (Hooks.Permissions memory) {
         return Hooks.Permissions({
@@ -299,14 +363,23 @@ contract SwapFeeHook is BaseHook {
         address, PoolKey calldata key, IPoolManager.SwapParams calldata params,
         BalanceDelta delta, bytes calldata
     ) external override onlyPoolManager returns (bytes4, int128) {
-        // Take a percentage of the output token as a hook fee
-        bool zeroForOne = params.zeroForOne;
-        int128 outputAmount = zeroForOne ? delta.amount1() : delta.amount0();
-        if (outputAmount <= 0) return (this.afterSwap.selector, 0);
+        // The fee is charged in the UNSPECIFIED currency, so resolve which one that is.
+        // currency0 is the specified currency exactly when exactInput == zeroForOne.
+        bool currency0Specified = (params.amountSpecified < 0) == params.zeroForOne;
+        (Currency currencyUnspecified, int128 amountUnspecified) = currency0Specified
+            ? (key.currency1, delta.amount1())
+            : (key.currency0, delta.amount0());
 
-        int128 hookFee = outputAmount * int128(int256(HOOK_FEE_BPS)) / 10000;
-        // Positive return = hook takes from output (reduces what user receives)
-        return (this.afterSwap.selector, hookFee);
+        // On exact-output swaps the unspecified leg is the input the user owes (negative).
+        if (amountUnspecified < 0) amountUnspecified = -amountUnspecified;
+        if (amountUnspecified == 0) return (this.afterSwap.selector, 0);
+
+        uint256 feeAmount = (uint256(uint128(amountUnspecified)) * HOOK_FEE_BPS) / TOTAL_BPS;
+
+        // Positive return credits the hook; take() converts that credit into real tokens.
+        // Without this take() the delta never zeroes and the swap reverts.
+        poolManager.take(currencyUnspecified, address(this), feeAmount);
+        return (this.afterSwap.selector, feeAmount.toInt128());
     }
 }
 ```
@@ -315,8 +388,24 @@ contract SwapFeeHook is BaseHook {
 
 Use `beforeSwapReturnDelta` to completely replace the concentrated liquidity curve with custom pricing:
 
+> **The two `BeforeSwapDelta` legs carry opposite signs, and the hook must move the tokens
+> itself.** `toBeforeSwapDelta(-amountSpecified, +amountSpecified)` no-ops the concentrated
+> liquidity swap: the specified leg cancels the user's requested amount, the unspecified leg
+> is what the hook owes back. Giving both legs the same sign claims *both* currencies from
+> the swapper. The hook must also `take()` the input and `settle()` the output in the same
+> callback — the delta is an accounting entry, not a transfer, so an unresolved leg reverts
+> the swap with `CurrencyNotSettled()`.
+>
+> A no-op'd curve makes the hook the entire AMM: conservation, available liquidity, pricing,
+> slippage, exact-output fills, and rounding are now all your responsibility.
+
 ```solidity
+// import {BeforeSwapDelta, toBeforeSwapDelta} from "v4-core/src/types/BeforeSwapDelta.sol";
+// import {CurrencySettler} from "v4-core/test/utils/CurrencySettler.sol";
+
 contract ConstantSumHook is BaseHook {
+    using CurrencySettler for Currency;
+
     function getHookPermissions() public pure override returns (Hooks.Permissions memory) {
         return Hooks.Permissions({
             beforeInitialize: false, afterInitialize: false,
@@ -334,15 +423,23 @@ contract ConstantSumHook is BaseHook {
         external override onlyPoolManager returns (bytes4, BeforeSwapDelta, uint24)
     {
         // Constant-sum: 1 token0 always equals 1 token1 (stablecoin peg)
+        (Currency inputCurrency, Currency outputCurrency) = params.zeroForOne
+            ? (key.currency0, key.currency1)
+            : (key.currency1, key.currency0);
         uint256 absAmount = params.amountSpecified > 0
             ? uint256(int256(params.amountSpecified))
             : uint256(int256(-params.amountSpecified));
 
-        // BeforeSwapDelta(specifiedDelta, unspecifiedDelta)
-        // For exact input zeroForOne: hook takes input (negative specified), gives output (negative unspecified)
+        // Move the tokens: pull the full input in, pay the equal output back out.
+        poolManager.take(inputCurrency, address(this), absAmount);
+        outputCurrency.settle(poolManager, address(this), absAmount, false);
+
+        // BeforeSwapDelta(specifiedDelta, unspecifiedDelta) — OPPOSITE signs.
+        // -amountSpecified cancels the requested amount (no-ops the CL swap);
+        // +amountSpecified is the equal-and-opposite amount the hook owes back.
         BeforeSwapDelta hookDelta = toBeforeSwapDelta(
-            int128(-params.amountSpecified),  // fully consume the input
-            int128(int256(absAmount))          // provide equal output
+            int128(-params.amountSpecified),
+            int128(params.amountSpecified)
         );
         return (this.beforeSwap.selector, hookDelta, 0);
     }
@@ -497,6 +594,10 @@ contract MyHookTest is Test, Deployers {
 ## Security Considerations
 
 - **onlyPoolManager**: Always use the `onlyPoolManager` modifier on callbacks — never allow direct calls
+- **`sender` is not the user**: `sender` is whoever called the PoolManager — a router, an aggregator, or an attacker's own unlocker contract. Never use it for user-level authorization or accounting. Resolve the economic user via a trusted-router + `hookData` pattern
+- **`hookData` is untrusted**: anyone can initialize a pool on your hook and pass arbitrary `hookData` through a direct PoolManager call. Only believe it when `sender` is a router you trust to encode it faithfully
+- **Return deltas are credits, not transfers**: a nonzero returned delta accounts value to the *hook's* address inside the PoolManager. The hook must `take()` or `settle()` it in the same callback, or the currency delta stays nonzero and the operation reverts with `CurrencyNotSettled()`
+- **Deltas apply to the unspecified currency**: which token that is flips with direction *and* exact-in/exact-out. Derive it (`currency0Specified = (amountSpecified < 0) == zeroForOne`); never assume it's the output
 - **Reentrancy via unlock**: Hooks execute within an `unlock` context. Don't call `poolManager.unlock()` from a hook callback
 - **State isolation**: Per-pool state must use `PoolId` as the key. Never use global state for pool-specific data
 - **Gas budget**: Each hook callback adds gas to every swap/LP operation. Keep callbacks under 50K gas. Profile with `forge test --gas-report`
@@ -510,6 +611,10 @@ contract MyHookTest is Test, Deployers {
 - [ ] All implemented callbacks have `onlyPoolManager` modifier
 - [ ] All callbacks return correct function selector
 - [ ] Return-delta hooks (beforeSwapReturnDelta, afterSwapReturnDelta) conserve value
+- [ ] Every returned delta is resolved with `take()`/`settle()` in the same callback
+- [ ] Unspecified currency derived, not assumed — verified in all four swap quadrants
+- [ ] No user-level authorization or accounting keyed on the `sender` argument
+- [ ] `hookData` validated, or only trusted behind an allowlisted router
 - [ ] Dynamic fees bounded within [0, MAX_LP_FEE] (1_000_000)
 - [ ] Per-pool state keyed by PoolId, not global
 - [ ] No reentrancy via `poolManager.unlock()` from callbacks
