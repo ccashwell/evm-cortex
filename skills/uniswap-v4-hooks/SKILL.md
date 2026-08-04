@@ -235,7 +235,17 @@ currencies. Core subtracts the returned hook delta from the caller's aggregate
 delta and accounts it to the hook.
 
 For a swap, the specified currency depends on both `zeroForOne` and whether
-`amountSpecified` is exact input (negative) or exact output (positive). A
+`amountSpecified` is exact input (negative) or exact output (positive):
+
+| Swap | Specified | Unspecified |
+| --- | --- | --- |
+| Exact input, zeroForOne | currency0 (in) | currency1 (out) |
+| Exact input, oneForZero | currency1 (in) | currency0 (out) |
+| Exact output, zeroForOne | currency1 (out) | currency0 (in) |
+| Exact output, oneForZero | currency0 (out) | currency1 (in) |
+
+Derive the leg (`currency0Specified = (amountSpecified < 0) == zeroForOne`);
+selecting it by direction alone is correct only for exact input. A
 nonzero specified delta may reduce the amount executed by the native pool, but
 it cannot cross zero and change the swap from exact input to exact output or
 the reverse. Reaching exactly zero is allowed. At that boundary the native swap
@@ -243,7 +253,10 @@ is skipped and the hook acts as the complete exchange, so it must provide and
 settle the output while enforcing pricing and slippage.
 
 Returning a delta changes PoolManager accounting; it does not transfer tokens
-or prove that output inventory exists. Every address/currency delta opened
+or prove that output inventory exists. A positive returned delta credits the
+hook inside the PoolManager; the hook must `take()` that credit in the same
+callback, or the currency's delta stays nonzero and the operation reverts with
+`CurrencyNotSettled()`. Every address/currency delta opened
 during the unlock must be zero before the unlock returns. For ERC-20 payment,
 call `sync(currency)`, transfer the tokens, then call `settle()` or
 `settleFor()`. For native payment, sync the native currency before calling
