@@ -58,7 +58,6 @@ fi
 echo ""
 
 SKILL_COUNT=$(find "$REPO_DIR/skills/" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')
-RULE_COUNT=$(find "$REPO_DIR/rules/" -name "*.md" 2>/dev/null | wc -l | tr -d ' ')
 
 if [ "$SKILLS_ONLY" = true ]; then
   echo "This will install:"
