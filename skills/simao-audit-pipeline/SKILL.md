@@ -11,7 +11,7 @@ The method is reverse-engineered from 0xSimao's 869 published findings (177 High
 
 Roughly a third of his Highs are one shape: *value leaves the contract but the variable tracking it is never decremented (or is decremented in only one of two branches)*, so early actors over-withdraw and the last actor out is insolvent. The twelve lenses are built around that class and its siblings.
 
-Vendored from 0xSimao's open-source skill (`github.com/0xsimao/0xsimao-ai`), **VERSION 1.0.0** (see the `VERSION` file alongside this one). Everything under `references/` is upstream content carried over intact — the EVM Cortex adaptations (agent mapping, Foundry pre-flight, PoC routing) live in this `SKILL.md` only, so an upstream re-sync replaces `references/` without merge conflicts. Check for a newer upstream revision before a high-stakes audit:
+Vendored from 0xSimao's open-source skill (`github.com/0xsimao/0xsimao-ai`), **VERSION 1.0.0** (see the `VERSION` file alongside this one). Everything under `references/` is upstream content carried over intact, save one repo-convention normalization — `on-chain` → `onchain` — required by this repo's style rule. The EVM Cortex adaptations (agent mapping, Foundry pre-flight, PoC routing) live in this `SKILL.md` only, so an upstream re-sync replaces `references/` cleanly. Check for a newer upstream revision before a high-stakes audit:
 
 ```bash
 curl -sf https://raw.githubusercontent.com/0xsimao/0xsimao-ai/main/VERSION
@@ -53,7 +53,7 @@ If the repo has a README, protocol docs, or a `*.md` spec in scope, add them to 
 
 **Flags:**
 
-- `--file-output` (off by default): also write the report to a markdown file at the path in `references/report-formatting.md`. Never write a report file unless explicitly passed.
+- `--file-output` (off by default): also write the report to `{project-name}-simao-audit-report-{timestamp}.md` in the current working directory, where `{project-name}` is the repo-root basename and `{timestamp}` is `YYYYMMDD-HHMMSS` at scan time. (The vendored `references/report-formatting.md` defines the report *content*, not its path — the path lives here.) Never write a report file unless explicitly passed.
 
 ---
 
@@ -188,9 +188,11 @@ Output format: see shared-rules.md inside your bundle.
 
 *Fallback — no subagents.* If your runtime cannot spawn subagents at all, run the lenses yourself in twelve separate sequential passes: read one bundle, emit that lens's findings block in full, then move to the next lens without carrying the previous lens's findings forward. Slower, and weaker because the passes are no longer blind to each other, but the method survives. **Never** collapse the twelve lenses into a single pass over the source — that discards the whole design.
 
-### Turn 5 — Wait
+### Turn 5 — Wait, then verify the lenses did the work
 
 Proceed only once all twelve have notified completion. Let them run to natural completion; do not start dedup early and do not poll. A lens that dies without output is a missing lens, not a quiet one — re-run that lens alone against its existing bundle rather than proceeding with eleven.
+
+**Marker check (do not skip).** `shared-rules.md` binds every lens to four reasoning markers, each with a trigger that requires a literal marker in the lens's working text: `[Model: <name>]` when it opens a function that moves value, `[Why: <file:line>]` when it stops on an unclear line, `[Defeat: <function>]` when a path reads as clean, and `[LastOut: <lifecycle>]` when it finishes a lifecycle. After each lens returns, grep its output for those four markers. A lens that returns findings with zero markers did not reason — it scanned, which is the exact failure mode the method exists to beat. A lens with no `[LastOut:]` never ran the solvency test on any lifecycle. Treat either as noncompliant: re-run that lens alone against its existing bundle before dedup, and if it still returns bare, weight its findings down and note the shortfall in the report's methodology line. Do not carry an unverified lens into Turn 6.
 
 ### Turn 6 — Deduplicate, judge, report
 
@@ -199,9 +201,10 @@ Single pass: dedup, gate, and produce the final report in one turn. Do not print
 1. **Dedup** per the four hard gates below.
 2. **Judge** each deduped finding through the four gates in `severity-calibration.md`, in order, no skipping and no revisiting after a verdict. `UNCERTAIN = ALLOWS`.
 3. **Promote or reject leads** per the method: LEAD → FINDING if the full path exists in source, or if `[lenses: 2+]` independently reached it. `[lenses: 2+]` does NOT override a code path that actually interrupts the attack before harm — demote instead. Judge what the code allows, never what the deployer intends.
-4. **Classify severity** per the matrix in `severity-calibration.md` and attach PoCs per the EVM Cortex addendum below.
-5. **Format and print** per `report-formatting.md` (`Description` + `Recommended Mitigation` per finding). With `--file-output`, also write the file.
-6. **Auto-clean:** `rm -rf {bundle_dir}`. It is transient build state, not an artifact. For debugging, copy it elsewhere before re-running.
+4. **Classify severity** per the matrix in `severity-calibration.md`.
+5. **Construct and verify PoCs — before formatting, while `{bundle_dir}` still exists.** Route every High (and any Medium where a runnable test is cheap) to `security-verifier` or `poc-writer` per the EVM Cortex addendum below, then run the High-finding fix verification. This step MUST precede the print and the cleanup: a printed report cannot gain a PoC after the fact, and Turn 6 deletes the bundle at the end. A High without a landed PoC is not ready — resolve it here, not after.
+6. **Format and print** per `report-formatting.md` (`Description` + `Recommended Mitigation` per finding), embedding each High's verified PoC. With `--file-output`, also write the file.
+7. **Auto-clean:** `rm -rf {bundle_dir}`. It is transient build state, not an artifact. For debugging, copy it elsewhere before re-running.
 
 ---
 
@@ -219,10 +222,16 @@ Four gates govern this phase. They exist because the failure mode of naive mergi
 
 **Gate D — Mitigation preservation (HARD).** Before writing a merged `mitigation:` for a `(Contract, function)` with multiple findings, collect every raw mitigation and group by the actual change (added require / added decrement / reordered call / changed rounding / restricted target). Two mitigations are distinct if they change different operations or different directions. ≥2 distinct → present as Option A, B… **verbatim** from the lens text, labelled by kind (add-missing-write / validate / reorder / round-other-way / restrict).
 
-**Completeness gate (HARD).** Before printing, enumerate every unique `(Contract, function)` in any raw FINDING or LEAD across all twelve lenses. Every one MUST have ≥1 item in the final report; zero means a silent drop, so fix it. Print inline before the report:
+**Completeness gate (HARD).** Before printing, enumerate every unique `(Contract, function)` in any raw FINDING or LEAD across all twelve lenses. Every one MUST be *accounted for* — never silently dropped — but "accounted for" is not the same as "reported". Each resolves to exactly one of three fates:
+
+- **reported** — survives as a finding, or as a one-liner in the `## Unverified leads` section;
+- **rejected** — a judging gate in step 3 blocked its only attack path, recorded with its one-line rejection reason (these do NOT go into the report — forcing a gate-killed false positive back in is the failure this clause prevents);
+- **merged** — folded into another finding on the same `(Contract, function)` per Gates B/C.
+
+A `(Contract, function)` with zero fate is the silent drop this gate exists to catch. Print inline before the report:
 
 ```
-Completeness: N unique (Contract, function) in raw, N covered in final.
+Completeness: N unique (Contract, function) in raw — R reported, X rejected (with reasons), M merged.
 ```
 
 **Composite chains.** If finding A's output feeds finding B's precondition AND the combined impact exceeds either alone, add `Chain: [A] + [B]`. He reports these as their own finding when the chain crosses a trust boundary. Most audits produce zero to two.
@@ -241,7 +250,7 @@ The vendored `severity-calibration.md` assigns **High / Medium / Low / Info** an
 | Medium | PoC or clear step-by-step reproduction |
 | Low / Info | Description only |
 
-Route PoC construction for every High (and any Medium where a runnable test is cheap) to the `security-verifier` or `poc-writer` agent after Turn 6. Pin the fork block number in every fork-based PoC so it stays reproducible. A High finding with no PoC is not ready to report.
+Route PoC construction for every High (and any Medium where a runnable test is cheap) to the `security-verifier` or `poc-writer` agent in **Turn 6 step 5 — before the report is formatted and before `{bundle_dir}` is deleted**, never after. Pin the fork block number in every fork-based PoC so it stays reproducible. A High finding with no PoC is not ready to report.
 
 ### Fix verification (High findings)
 

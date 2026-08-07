@@ -157,7 +157,7 @@ Built on knowledge from:
 - [evmresearch.io](https://evmresearch.io) — EVM security research
 - [Circle Skills](https://github.com/circlefin/skills) — USDC and CCTP integration patterns
 - [Pashov Skills](https://github.com/pashov/skills) — Audit methodology and fuzz suite generation (`pashov-audit-pipeline`, `xray-pre-audit`, and `fizz` vendor upstream code directly)
-- [0xSimao AI](https://github.com/0xsimao/0xsimao-ai) — Accounting-first audit methodology (`simao-audit-pipeline` vendors its `references/` intact)
+- [0xSimao AI](https://github.com/0xsimao/0xsimao-ai) — Accounting-first audit methodology (`simao-audit-pipeline` vendors its `references/` intact, bar the `onchain` spelling normalization)
 
 ## License
 

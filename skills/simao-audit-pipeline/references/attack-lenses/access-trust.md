@@ -29,7 +29,7 @@ Not "this function is `onlyOwner`, is the owner trusted?" — that is not a find
 > *Fixed term loans can be deployed with a wrong fee manager and possibly steal all funds*
 > *Changing providers might lead to lost assets in BorrowingVault and YieldVault*
 
-**Compose privileged powers into theft.** A role doing its job within its documented bounds, but the bounds are not enforced on-chain and the composition is a rug. This IS reportable when you can name the concrete mechanism and the parameter that is unbounded — unlike bare "centralization risk," which is not.
+**Compose privileged powers into theft.** A role doing its job within its documented bounds, but the bounds are not enforced onchain and the composition is a rug. This IS reportable when you can name the concrete mechanism and the parameter that is unbounded — unlike bare "centralization risk," which is not.
 > *Pool Delegates can set a really high origination fee and steal all pool funds*
 > *REBALANCER_ROLE can drain funds by rebalancing in a loop in the BorrowingVault*
 > *Any duration can be passed by node operator*
