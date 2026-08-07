@@ -115,6 +115,9 @@ Complete audit with invariant fuzzing, formal properties, multi-iteration depth 
 ### Pashov 12-Agent Pipeline
 For comprehensive security review, use the `pashov-audit-pipeline` skill which runs 12 specialized attacker agents in parallel. Nine work a single lens — math precision, access control, economic security, execution trace, invariant, periphery, first principles, asymmetry, boundary — and three are gap-hunters (numerical, trust, flow) that report only bugs living at the seam between lenses. Findings are deduplicated, run through four judging gates, confidence-scored, and severity-classified with PoCs for Critical/High.
 
+### 0xSimao Accounting-First Pipeline
+For accounting-heavy protocols (vaults, lending, staking, yield, AMMs, bridges), use the `simao-audit-pipeline` skill. It reverse-engineers 0xSimao's 869 published findings: the orchestrator first writes a **money map** — assets, tracked totals, an asymmetry table, invariants, lifecycles, and actor cohorts — then hands it to 12 parallel single-specialty lenses (accounting-desync, share-exchange-rate, temporal-cohort, liquidation-solvency, cross-chain-state, rounding-precision, ordering-mev, dos-griefing, access-trust, integration-assumptions, edge-states, flow-completeness). His signature class: a tracked total that desyncs from reality, letting early actors over-withdraw and leaving the last user out insolvent. Findings are deduplicated through four hard gates, judged, and severity-classified with Foundry PoCs for High findings. Complements `pashov-audit-pipeline` — run both and treat overlap as signal.
+
 ### Pre-Audit Reconnaissance
 Use the `xray-pre-audit` skill to generate a structured pre-audit report (threat model, invariants, entry points, git analysis) before diving into line-by-line review. Its `x-ray.md` output is the best context package for both `pashov-audit-pipeline` and `fizz`.
 
@@ -196,7 +199,7 @@ When a task matches a specific domain, load the relevant skill from `skills/`:
 | Testing | foundry-testing, invariant-testing, fork-testing, fuzzing-patterns, uniswap-v4-testing |
 | Stateful fuzzing | fizz, fizz-sync, fizz-convert, invariant-testing, fuzzing-patterns |
 | Stablecoin | usdc-integration, cctp-bridging |
-| Auditing | pashov-audit-pipeline, xray-pre-audit, audit-prep, audit-recon, audit-breadth-scan, audit-depth-analysis |
+| Auditing | pashov-audit-pipeline, simao-audit-pipeline, xray-pre-audit, audit-prep, audit-recon, audit-breadth-scan, audit-depth-analysis |
 | Token standards | erc20-patterns, erc721-patterns, erc4626-patterns, proxy-patterns |
 | Tooling | foundry-setup, slither-analysis, cast-commands, forge-scripting |
 | Deployment | l2-deployment, multichain-deployment, contract-verification |

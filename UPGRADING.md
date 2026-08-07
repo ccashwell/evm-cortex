@@ -71,6 +71,8 @@ These are user data:
 
 These three skills now ship `references/`, `scripts/`, and `templates/` subdirectories alongside `SKILL.md`. An upgrade must therefore replace the whole skill directory, which is why `--update` replaces rather than merges.
 
+**Added `simao-audit-pipeline`.** An accounting-first audit skill vendored from [0xSimao AI](https://github.com/0xsimao/0xsimao-ai) (VERSION 1.0.0), reverse-engineered from 0xSimao's 869 published findings. The orchestrator builds a money map (assets, tracked totals, asymmetry table, invariants, lifecycles, cohorts), then runs 12 parallel single-specialty lenses over it, deduplicates through four hard gates, and emits severity-classified findings with Foundry PoCs for Highs. It ships a `references/` subdirectory (method, severity calibration, report formatting, 12 attack lenses + shared rules) carried over from upstream intact; the EVM Cortex adaptations (agent mapping, Foundry pre-flight, PoC routing) live in `SKILL.md` only. Skills total 95.
+
 ### v1.0.0 (2026-04-10)
 
 **Initial release as EVM Cortex** — Ethereum protocol engineering squad.

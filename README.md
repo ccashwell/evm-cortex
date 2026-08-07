@@ -4,7 +4,7 @@
 
 Ethereum protocol engineering squad for AI coding assistants.
 
-50 agents, 94 skills, 19 hooks, and 15 rules covering Solidity development, security auditing, DeFi integration, smart contract testing, and deployment — everything needed to build, audit, and ship smart contracts.
+50 agents, 95 skills, 19 hooks, and 15 rules covering Solidity development, security auditing, DeFi integration, smart contract testing, and deployment — everything needed to build, audit, and ship smart contracts.
 
 ## Install
 
@@ -86,7 +86,7 @@ git pull origin main
 | Standards (5) | `eip-expert` `erc-implementer` `upgrade-planner` `governance-designer` `l2-specialist` |
 | Cross-Cutting (5) | `planner` `code-reviewer` `scout` `scribe` `verifier` |
 
-### 94 Skills
+### 95 Skills
 
 | Category | Skills |
 |----------|--------|
@@ -95,7 +95,7 @@ git pull origin main
 | DeFi (12) | `uniswap-v4-hooks` `aave-integration` `compound-patterns` `curve-integration` `chainlink-oracles` `flash-loan-usage` `yield-vault-patterns` `staking-reward-patterns` `governance-patterns` `liquidity-mining` `token-bonding-curves` `dutch-auction-patterns` |
 | Uniswap (6) | `uniswap-v4-testing` `uniswap-v4-expert` `uniswap-v3-expert` `uniswap-math` `lp-analyst` `pool-finder` |
 | Testing (11) | `foundry-testing` `invariant-testing` `formal-verification` `fork-testing` `gas-snapshot-testing` `coverage-analysis` `fuzzing-patterns` `test-fixtures` `fizz` `fizz-sync` `fizz-convert` |
-| Audit (8) | `audit-prep` `audit-recon` `audit-breadth-scan` `audit-depth-analysis` `audit-verification` `audit-report-generation` `pashov-audit-pipeline` `xray-pre-audit` |
+| Audit (9) | `audit-prep` `audit-recon` `audit-breadth-scan` `audit-depth-analysis` `audit-verification` `audit-report-generation` `pashov-audit-pipeline` `simao-audit-pipeline` `xray-pre-audit` |
 | Standards (12) | `erc20-patterns` `erc721-patterns` `erc1155-patterns` `erc4626-patterns` `erc7702-patterns` `erc8004-patterns` `eip712-signing` `create2-patterns` `proxy-patterns` `minimal-proxy` `diamond-pattern` `beacon-proxy` |
 | Stablecoins (2) | `usdc-integration` `cctp-bridging` |
 | Tooling (8) | `foundry-setup` `slither-analysis` `aderyn-analysis` `cast-commands` `anvil-patterns` `forge-scripting` `contract-verification` `blockscout-mcp` |
@@ -157,6 +157,7 @@ Built on knowledge from:
 - [evmresearch.io](https://evmresearch.io) — EVM security research
 - [Circle Skills](https://github.com/circlefin/skills) — USDC and CCTP integration patterns
 - [Pashov Skills](https://github.com/pashov/skills) — Audit methodology and fuzz suite generation (`pashov-audit-pipeline`, `xray-pre-audit`, and `fizz` vendor upstream code directly)
+- [0xSimao AI](https://github.com/0xsimao/0xsimao-ai) — Accounting-first audit methodology (`simao-audit-pipeline` vendors its `references/` intact)
 
 ## License
 
