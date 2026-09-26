@@ -128,20 +128,20 @@ fees0 = (feeGrowthInside0X128 - position.feeGrowthInside0LastX128) × position.l
 
 ### Worked Example: WETH/USDC Price Conversion
 ```
-WETH = 18 decimals (token0, lower address on mainnet pools)
-USDC = 6 decimals (token1)
-Price of 1 ETH = 3000 USDC
+USDC = 6 decimals  (token0 — 0xA0b8... sorts below 0xC02a..., so USDC is token0 on every mainnet WETH/USDC pool)
+WETH = 18 decimals (token1)
+Price of 1 ETH = 3000 USDC  →  1 USDC = 1/3000 ETH
 
-In pool terms (token1/token0):
-price_raw = 3000 × 10^6 / 10^18 = 3000 × 10^(-12) = 3e-9
+In pool terms (token1/token0, raw units):
+price_raw = (1/3000) × 10^18 / 10^6 = 10^12 / 3000 ≈ 3.3333e8
 
-sqrtPrice = √(3e-9) ≈ 5.477e-5
-sqrtPriceX96 = 5.477e-5 × 2^96 ≈ 4_339_505_179_874_779_xxx
+sqrtPrice = √(3.3333e8) ≈ 18257.4186
+sqrtPriceX96 = 18257.4186 × 2^96 ≈ 1_446_501_726_624_926_496_477_173_928_747_177  (≈ 1.4465e33)
 
-tick = log(3e-9) / log(1.0001) ≈ -196237
+tick = floor(log(3.3333e8) / log(1.0001)) = floor(196256.35) = 196256
 ```
 
-**Note:** Token ordering matters! On Ethereum mainnet, WETH (0xC02a...) > USDC (0xA0b8...) numerically, so USDC is token0 and WETH is token1 in the WETH/USDC pool. This inverts the price representation.
+**Note:** Token ordering matters! Had WETH been token0 (as many tutorials assume), price_raw would be 3000 × 10^6 / 10^18 = 3e-9, sqrtPriceX96 ≈ 4_339_505_179_874_779_489_431_521 and tick = floor(-196256.35) = -196257 — the mirror image of the real mainnet pool. Always read `token0()` / `currency0` before interpreting `sqrtPriceX96`.
 
 ## Output Format
 

@@ -13,7 +13,8 @@ description: Use when discovering Uniswap pools, querying pool state, analyzing 
 | V3 QuoterV2 | `0x61fFE014bA17989E743c5F6cB21bF9697530B21e` |
 | V3 SwapRouter02 | `0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45` |
 | V3 NonfungiblePositionManager | `0xC36442b4a4522E871399CD717aBDD847Ab11FE88` |
-| V4 PoolManager | `0x000000000004444c5dc75cb358380d2e3de08a90` |
+| V4 PoolManager | `0x000000000004444c5dc75cB358380D2e3dE08A90` |
+| V4 StateView | `0x7fFE42C4a5DEeA5b0feC41C94C136Cf115597227` |
 
 ## V3 Pool Discovery
 
@@ -131,36 +132,48 @@ function orderCurrencies(address a, address b) pure returns (Currency c0, Curren
 ### Reading V4 Pool State with cast
 
 ```bash
-POOL_MANAGER=0x000000000004444c5dc75cb358380d2e3de08a90
+# Read through the StateView lens, NOT the PoolManager. getSlot0/getLiquidity/... are
+# StateLibrary *internal* helpers built on extsload; the PoolManager exposes no such ABI
+# and `cast call $POOL_MANAGER "getSlot0(bytes32)..."` reverts. Ethereum address below;
+# per-chain StateView addresses: https://developers.uniswap.org/docs/protocols/v4/deployments
+STATE_VIEW=0x7fFE42C4a5DEeA5b0feC41C94C136Cf115597227
 
 # Get slot0: (sqrtPriceX96, tick, protocolFee, lpFee)
-cast call $POOL_MANAGER \
+cast call $STATE_VIEW \
   "getSlot0(bytes32)(uint160,int24,uint24,uint24)" \
   <pool_id>
 
 # Get active liquidity
-cast call $POOL_MANAGER \
+cast call $STATE_VIEW \
   "getLiquidity(bytes32)(uint128)" \
   <pool_id>
 
 # Get liquidity at a specific tick
-cast call $POOL_MANAGER \
+cast call $STATE_VIEW \
   "getTickLiquidity(bytes32,int24)(uint128,int128)" \
   <pool_id> <tick>
 
 # Get tick bitmap word
-cast call $POOL_MANAGER \
+cast call $STATE_VIEW \
   "getTickBitmap(bytes32,int16)(uint256)" \
   <pool_id> <word_position>
+
+# IStateView also exposes getTickInfo, getFeeGrowthGlobals, getPositionInfo, getFeeGrowthInside
 ```
 
 ### Computing a PoolId Offchain
 
 ```bash
-# Encode the PoolKey struct and hash it
+# abi.encode the PoolKey fields (cast needs a function-style signature) and hash them
 cast keccak $(cast abi-encode \
-  "(address,address,uint24,int24,address)" \
+  "f(address,address,uint24,int24,address)" \
   <currency0> <currency1> <fee> <tickSpacing> <hooks>)
+
+# Example — mainnet native ETH/USDC 0.05% pool (currency0 = address(0), fee 500, tickSpacing 10, no hook):
+cast keccak $(cast abi-encode "f(address,address,uint24,int24,address)" \
+  0x0000000000000000000000000000000000000000 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48 500 10 \
+  0x0000000000000000000000000000000000000000)
+# → 0x21c67e77068de97969ba93d4aab21826d33ca12bb9f565d8496e8fda8a82ca27
 ```
 
 ## Subgraph Queries
@@ -360,6 +373,9 @@ uint256 impactBps   = (priceBefore - priceAfter) * 10_000 / priceBefore;
 | Fee revenue vs IL | LP profitability | Negative = LPs losing money, expect exits |
 | Oracle cardinality | V3 observation buffer size (slot0 field 4) | Default 1 = no TWAP history |
 | Tick crossing frequency | How often price moves through tick boundaries | Very high = volatile, may deter LPs |
+| Protocol fee share | Portion of swap fees diverted from LPs (V3 `slot0.feeProtocol`, V4 `slot0.protocolFee`) | Nonzero on Ethereum mainnet: V3 `68`/`102` (1/4 or 1/6 of LP fees) since 2025-12-28, V4 static-fee pools since 2026-07-27 — subtract from LP fee-revenue estimates |
+
+Decode V3 `feeProtocol` as `token0 = feeProtocol % 16`, `token1 = feeProtocol >> 4`, protocol share `= 1/N` (68 → 1/4 on the 0.01%/0.05% tiers, 102 → 1/6 on the 0.30% tier). V4 `protocolFee` packs two pips fees — lower 12 bits zeroForOne, upper 12 bits oneForZero — charged on swap input before the LP fee (mainnet ETH/USDC 500/10 reads `512125`, i.e. 125 pips each way).
 
 ### Reading Oracle Cardinality
 
@@ -383,7 +399,7 @@ address pool = factory.createPool(tokenA, tokenB, fee);
 // Initialize with starting price (sqrtPriceX96 format)
 // For 1 token0 = 2000 token1 (e.g., 1 ETH = 2000 USDC with 18/6 decimals):
 // sqrtPriceX96 = sqrt(2000 * 1e6 / 1e18) * 2^96
-uint160 sqrtPriceX96 = 3543191142285914205922034323215; // example
+uint160 sqrtPriceX96 = 3543191142285914205922034; // sqrt(2e-9) * 2^96 ≈ 3.54e24 (with equal decimals it would be sqrt(2000) * 2^96 ≈ 3.54e30)
 IUniswapV3Pool(pool).initialize(sqrtPriceX96);
 ```
 
@@ -392,7 +408,7 @@ IUniswapV3Pool(pool).initialize(sqrtPriceX96);
 ```solidity
 import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 
-IPoolManager poolManager = IPoolManager(0x000000000004444c5dc75cb358380d2e3de08a90);
+IPoolManager poolManager = IPoolManager(0x000000000004444c5dc75cB358380D2e3dE08A90);
 
 PoolKey memory key = PoolKey({
     currency0: Currency.wrap(token0),
@@ -408,6 +424,9 @@ poolManager.initialize(key, sqrtPriceX96);
 ### sqrtPriceX96 Calculator
 
 ```solidity
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {FullMath} from "v4-core/src/libraries/FullMath.sol";
+
 /// @notice Computes sqrtPriceX96 from a human-readable price ratio
 /// @param price The price of token0 in terms of token1 (e.g., 2000 for 1 ETH = 2000 USDC)
 /// @param decimals0 Decimals of token0
@@ -417,11 +436,12 @@ function computeSqrtPriceX96(
     uint8 decimals0,
     uint8 decimals1
 ) pure returns (uint160) {
-    // adjustedPrice = price * 10^decimals0 / 10^decimals1
-    // sqrtPriceX96 = sqrt(adjustedPrice) * 2^96
-    uint256 adjustedPrice = price * (10 ** decimals1) / (10 ** decimals0);
-    uint256 sqrtPrice = Math.sqrt(adjustedPrice);
-    return uint160(sqrtPrice << 96);
+    // rawPrice = price * 10^decimals1 / 10^decimals0   (raw token1 units per raw token0 unit)
+    // sqrtPriceX96 = sqrt(rawPrice) * 2^96 = sqrt(rawPrice * 2^192)
+    // Scale by 2^192 BEFORE dividing so a sub-1 rawPrice (2000e6 / 1e18 = 2e-9) does not truncate to 0;
+    // FullMath.mulDiv keeps the 512-bit intermediate product from overflowing.
+    uint256 priceX192 = FullMath.mulDiv(price * (10 ** decimals1), 1 << 192, 10 ** decimals0);
+    return uint160(Math.sqrt(priceX192));
 }
 ```
 

@@ -40,20 +40,22 @@ efficiency = 1 / (1 - √(P_a / P_b))
 
 ±0.1% range → ~1000× V2 efficiency
 ±1% range   → ~100× V2 efficiency
-±10% range  → ~5× V2 efficiency
+±10% range  → ~10.5× V2 efficiency
+±25% range  → ~4.4× V2 efficiency
 Full range  → 1× V2 efficiency
 ```
 
 ### Fee APR
 ```
-fee_APR = (daily_volume × fee_tier × position_share) / position_value × 365
+fee_APR = (daily_volume × fee_tier × (1 - protocol_share) × position_share) / position_value × 365
 position_share = position_liquidity / total_active_liquidity
 breakeven_APR = |IL| × 365 / holding_period_days
 ```
+`protocol_share` is nonzero on Ethereum mainnet. V3: since UNIfication executed 2025-12-28, `slot0().feeProtocol` reads `68` on the 0.01%/0.05% tiers (protocol takes 1/4 of LP fees) and `102` on the 0.30% tier (1/6); decode `token0 = feeProtocol % 16`, `token1 = feeProtocol >> 4`, share `= 1/N`. V4: static-fee pools charge a protocol fee since 2026-07-27 (mainnet ETH/USDC 500/10: `protocolFee = 512125` → 125 pips per direction), taken from swap input ahead of the LP fee, so `protocol_share ≈ protocolFee / 1e6`.
 
-### IL Sensitivity (for small price changes)
+### Expected IL from Volatility (small-move approximation)
 ```
-dIL/dP ≈ -σ²t/8   (continuous approximation)
+E[IL] ≈ -σ²t/8   (expected V2 IL under geometric Brownian motion; second-order expansion, not a derivative)
 For 50% ETH volatility over 1 year: IL ≈ -0.5² × 1/8 = -3.125%
 ```
 
@@ -90,7 +92,7 @@ cast call <pool_address> "slot0()" --rpc-url $ETH_RPC
 |-----------|------------------|------------|----------------|
 | Stable/Stable (USDC/USDT) | ±0.1% ($0.999–$1.001) | ~1000× | Rare |
 | Correlated (ETH/stETH) | ±1% | ~100× | Weekly |
-| Major pair (ETH/USDC) | ±15–25% | ~3–5× | Daily–Weekly |
+| Major pair (ETH/USDC) | ±15–25% | ~4.4–7.1× | Daily–Weekly |
 | Volatile pair | ±50%+ or full range | ~1.5–2× | Infrequent |
 
 ## Rebalancing Strategies
@@ -127,7 +129,8 @@ rebalance IFF rebalance_benefit > rebalance_cost × safety_margin
 
 ### V4 Auto-Compound Hook
 ```solidity
-function afterSwap(...) external override returns (bytes4, int128) {
+// BaseHook (OpenZeppelin uniswap-hooks / Uniswap v4-hooks-public) keeps afterSwap non-virtual; override _afterSwap
+function _afterSwap(...) internal override returns (bytes4, int128) {
     // Collect accrued fees and re-deposit into the same position
     // Only compound if fees exceed gas threshold
 }
