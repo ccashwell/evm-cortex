@@ -1,36 +1,53 @@
 ---
 name: pashov-audit-pipeline
-description: Use when performing a comprehensive smart contract security audit. Implements the Pashov Audit Group's parallelized 12-agent attacker-framing methodology — nine single-specialty lenses (math precision, access control, economic security, execution trace, invariant, periphery, first principles, asymmetry, boundary) plus three gap-hunters that find bugs living at the seams between lenses. Produces deduplicated, confidence-scored, severity-classified findings with PoC verification.
+description: Use when performing a comprehensive smart contract security audit. Implements the Pashov Audit Group's parallelized 12-agent attacker-framing methodology (solidity-auditor v4) — nine single-specialty lenses (math precision, access control, economic security, execution trace, invariant, periphery, first principles, asymmetry, boundary) plus three gap-hunters that find bugs living at the seams between lenses. Supports loop mode (N passes per scan, each told what earlier passes found) and a findings ledger that remembers results across scans. Produces a shell-assembled, deduplicated, confidence-scored report plus an EVM Cortex severity and PoC annex. Trigger on "pashov audit", "run the auditor in loop mode", "run 3 passes".
 ---
 
 # Pashov Audit Pipeline
 
 You are the orchestrator of a parallelized smart contract security audit.
 
-Twelve specialized agents attack the same codebase at once, then their output is deduplicated and gated into a single report. Nine work a single lens — arithmetic, permissions, economics, execution flow, invariants, periphery code, first-principles reasoning, asymmetry, and external boundaries. Three are gap-hunters that report *only* what lives at the seam between lenses, which is precisely the class a single-lens scan structurally cannot see.
+Twelve specialized agents attack the same codebase at once, then their output is deduplicated, gated, and assembled into a single report. Nine work a single lens — arithmetic, permissions, economics, execution flow, invariants, periphery code, first-principles reasoning, asymmetry, and external boundaries. Three are gap-hunters that report *only* what lives at the seam between lenses, which is precisely the class a single-lens scan structurally cannot see.
 
-Vendored from the Pashov Audit Group's open-source approach (`github.com/pashov/skills`), skill `solidity-auditor`, **VERSION 3** (see the `VERSION` file alongside this one). Everything under `references/` is upstream content carried over intact except for two documented EVM Cortex additions — the severity/PoC addendum in `references/judging.md` and the deviations section in `references/report-formatting.md`. Check for a newer upstream revision before a high-stakes audit:
+Vendored from the Pashov Audit Group's open-source approach (`github.com/pashov/skills`), skill `solidity-auditor`, **VERSION 4** (see the `VERSION` file alongside this one). Everything under `references/` is upstream content carried over intact, with three documented EVM Cortex deviations:
+
+1. `references/orchestration.md` is upstream's `SKILL.md`, vendored verbatim so the turn-by-turn procedure (memory read, prune, bundle build, run files, assembly) stays a file-by-file diff against upstream. Where any reference file says "SKILL.md Turn N", it means that file.
+2. `references/judging.md` carries an appended severity/PoC addendum required by this repo's finding-output-format, severity-matrix, and poc-execution rules.
+3. `on-chain`/`off-chain` are normalized to `onchain`/`offchain` across `references/` prose and in the one disclaimer string `assemble.sh` prints, per this repo's style rule.
+
+Every other EVM Cortex adaptation — agent mapping, context package, Foundry pre-flight, the severity line in each finding block, and the Turn 6 annex — lives in this `SKILL.md` only, so an upstream re-sync replaces `references/` cleanly. Check for a newer upstream revision before a high-stakes audit:
 
 ```bash
 curl -sf https://raw.githubusercontent.com/pashov/skills/main/solidity-auditor/VERSION
 ```
 
-If that returns a number greater than 3, this skill is behind upstream.
+If that returns a number greater than 4, this skill is behind upstream.
+
+## What v4 changed
+
+- **Loop mode.** `--loop [N]` runs N passes of the twelve agents in one scan. Every pass after the first is handed what the earlier passes found as "ground already walked", so it hunts new ground. One combined report at the end. When the runner asks for loop mode without a number, the default is 3 passes; the reference gives measured times (about 15 minutes per pass on a 2,200-line codebase).
+- **Scan memory.** `--memory` (on automatically when passes > 1) keeps a ledger at `.solidity-auditor/memory.tsv` in the audited repo. Findings are tagged `KNOWN (n scans)` or `NEW`; records the scan did not raise again are listed under "Known from earlier scans" and explicitly marked not re-checked.
+- **Shell-assembled report.** Each pass writes its gated findings to `.solidity-auditor/runs/{stamp}/run-K.md` while it still has context to spare; `references/assemble.sh` is the only producer of `full-report.md`. The orchestrator never composes, re-words, or summarizes the report. A real 3-pass scan that produced 71 findings once printed 14 of them and claimed full coverage; the design exists to kill that defect.
+- **Simplified Technical English.** `references/report-language.md` is appended to every agent bundle and governs every title and Description: one sentence, 25 words or fewer, active voice, names who acts and what they get.
+- **Threshold 75, not 80.** A promoted lead lands at exactly 75 and must clear the line. It is set once in `judging.md`; the assembler reads it from there.
+- **Scope.** Build and dependency directories are excluded; deploy scripts (`script/`, `deploy/`, `*.s.sol`) are **in scope** because they set constructor arguments and hand over ownership; explicitly named files are always scanned wherever they live.
+- **Agents are READ-ONLY** inside the audited repository. No PoC files, no scratch notes, not even ones deleted afterwards. PoCs are written under the scan directory (Turn 6).
+- **Upgrade warning** fires only when the local `VERSION` is lower than upstream, not merely different.
 
 ## The stance: agents are attackers, not reviewers
 
-This is what changed most in v3 and it is the whole point of the pipeline. Every agent is framed as an attacker with unlimited capital and flash loans, not as a reviewer working a checklist. Three consequences worth stating up front, because they invert the instinct:
+Every agent is framed as an attacker with unlimited capital and flash loans, not as a reviewer working a checklist. Three consequences worth stating up front, because they invert the instinct:
 
 - **When an agent finds a bug it deepens the attack — it never argues itself out of one.** Chain it, find more victims, lower the precondition cost. Refutation belongs to the judging phase, not the hunting phase.
 - **A finding is not real until traced with concrete values.** No proof means LEAD, not FINDING. Leads are not failures; they are honest calibration and they get emitted.
-- **Catalog scanning is not the product.** Pattern catalogs live in the sibling skills (`reentrancy-patterns`, `flash-loan-attacks`, `oracle-manipulation`, `signature-vulnerabilities`, `economic-attack-vectors`, `denial-of-service`) — load those for reference. A pure catalog sweep was the previous generation of this pipeline; it produced volume without depth, which is why upstream dropped the dedicated vector-scan agent in v3.
+- **Catalog scanning is not the product.** Pattern catalogs live in the sibling skills (`reentrancy-patterns`, `flash-loan-attacks`, `oracle-manipulation`, `signature-vulnerabilities`, `economic-attack-vectors`, `denial-of-service`) — load those for reference. A pure catalog sweep was an earlier generation of this pipeline; it produced volume without depth, which is why upstream dropped the dedicated vector-scan agent in v3.
 
 ### When to Use
 
 - Full security audit of a protocol before mainnet deployment
-- Re-audit after significant code changes or new feature additions
+- Re-audit after significant code changes or new feature additions — run with `--memory` so the report says what is new
 - Pre-merge security review of high-risk PRs touching core accounting or token logic
-- Competitive audit participation where thoroughness and finding volume matter
+- Competitive audit participation where thoroughness and finding volume matter — use loop mode
 
 ### When NOT to Use
 
@@ -39,183 +56,47 @@ This is what changed most in v3 and it is the whole point of the pipeline. Every
 - Gas-only review — use `gas-optimizer`
 - Code quality review without security focus — use `code-reviewer`
 - Pre-audit reconnaissance and readiness assessment — run `xray-pre-audit` first, then feed its output in as the context package
+- Accounting-heavy protocols where the question is "does the tracked total match reality" — run `simao-audit-pipeline` as well and treat overlap as signal
 
 ---
 
-## Mode Selection
+## How to run this skill
 
-**Exclude pattern:** skip directories `interfaces/`, `lib/`, `mocks/`, `test/`, `script/` and files matching `*.t.sol`, `*.s.sol`, `*Test*.sol`, `*Mock*.sol`.
+Follow `references/orchestration.md` turn by turn — Mode Selection, Turn 1 through Turn 5, and its Banner — with the EVM Cortex substitutions and insertions below. The reference files it delegates to sit in the same directory: `agent-prompts.md` (Turn 3a prompts), `dedup-and-assembly.md` (Turn 4 and Turn 5 procedure), `report-formatting.md` (finding-block shape), `report-language.md` (wording), `judging.md` (gates, confidence, lead promotion, severity addendum), `senior-auditor-sop.md` and `hacking-agents/` (bundle content), and `assemble.sh` (the assembler).
 
-- **Default** (no arguments): scan all `.sol` files using the exclude pattern. Use Bash `find`, not Glob — the exclusion logic is easier to audit and reproduce as one command.
-- **`$filename ...`**: scan the specified file(s) only.
+Two upstream steps are pinned here because the runtime differs:
 
-**Flags:**
+- **`{resolved_path}`** is this skill's own `references/` directory. Do not glob for `shared-rules.md` — the installer places a copy under `~/.claude/skills/` and a repo checkout may hold another, and a glob can pick the wrong one.
+- **Version check** (Turn 1 e): compare as numbers and warn only when local is lower. Print `⚠️ Upstream solidity-auditor is at version N, this skill is vendored at 4. See https://github.com/pashov/skills`. A failed fetch is skipped silently — a network failure is not an audit finding.
 
-- `--file-output` (off by default): also write the report to a markdown file, at the path in `references/report-formatting.md`. Never write a report file unless explicitly passed.
+### Turn 1b — Model and pass count
 
----
+Ask both questions in one `AskUserQuestion` call exactly as the reference describes. The runner's model choice `{agent_model}` applies to agents 1–9. **The three gap-hunters (agents 10–12) run on `opus` regardless of the answer.** Cross-lens reasoning is where model tier matters most; a weaker gap-hunter collapses into restating single-lens findings, which dedup then discards as duplicates — the most expensive way to save money in this pipeline. Say so in one line when the runner picks a lower tier.
 
-## Orchestration
+If the audited repo's `.gitignore` does not list `.solidity-auditor/`, print a one-line reminder that the runs directory and ledger should be ignored. Do not edit `.gitignore` yourself.
 
-### Turn 1 — Discover
+### Turn 2b — Context package (EVM Cortex insertion, once per scan)
 
-Print the banner, then make these tool calls in parallel in one message:
+After `source.md` is built and before the bundles are catted, assemble, when available: the protocol README, known issues (to avoid duplicate reports), documented design decisions, deployment context (target chains, upgrade strategy), external dependencies, and prior audit reports with resolution status. Write it to `{bundle_dir}/context.md` and append it to every bundle **after `report-language.md` and before `known-findings.md`**. Keep it under 300 lines; the agents' attention belongs to the source.
 
-1. Bash `find` for in-scope `.sol` files per mode selection
-2. `ToolSearch select:Agent`
-3. Read the local `VERSION` file in this skill's directory
-4. Bash `curl -sf https://raw.githubusercontent.com/pashov/skills/main/solidity-auditor/VERSION`
-5. Bash `mktemp -d ./.audit-XXXXXX` → store as `{bundle_dir}`
+If `xray-pre-audit` has been run, its `x-ray/x-ray.md` is the best available context package — it already carries the threat model, invariant list, and entry-point classification.
 
-`{resolved_path}` is this skill's `references/` directory.
+### Turn 2c — Foundry pre-flight (EVM Cortex insertion, once per scan)
 
-If the remote VERSION fetch succeeds and differs from local, print: `⚠️ Upstream solidity-auditor is at version N, this skill is vendored at 3. See https://github.com/pashov/skills`. If the fetch fails, skip silently — a network failure is not an audit finding.
-
-### Turn 1b — Model selection
-
-Ask which model tier the twelve agents should run at, via `AskUserQuestion`, defaulting to the orchestrator's own family. Store as `{agent_model}`.
-
-Prefer opus for the three gap-hunters regardless of the answer. Cross-lens reasoning is where model tier matters most, and a weaker gap-hunter collapses into restating single-lens findings — which Phase 4 then discards as duplicates. That is the most expensive way to save money in this pipeline.
-
-### Turn 2 — Prepare bundles
-
-Read `{resolved_path}/report-formatting.md` and `{resolved_path}/judging.md` in parallel.
-
-Then build all bundles in a single Bash command using `cat` (not shell variables or heredocs):
-
-1. `{bundle_dir}/source.md` — ALL in-scope `.sol` files, each under a `### path` header inside a fenced `solidity` block.
-2. One bundle per agent: `source.md` + SOP + that agent's specialty + shared rules.
-
-| Bundle | Appended files (relative to `{resolved_path}`) |
-|--------|-----------------------------------------------|
-| `agent-1-bundle.md` | `senior-auditor-sop.md` + `hacking-agents/math-precision-agent.md` + `hacking-agents/shared-rules.md` |
-| `agent-2-bundle.md` | `senior-auditor-sop.md` + `hacking-agents/access-control-agent.md` + `hacking-agents/shared-rules.md` |
-| `agent-3-bundle.md` | `senior-auditor-sop.md` + `hacking-agents/economic-security-agent.md` + `hacking-agents/shared-rules.md` |
-| `agent-4-bundle.md` | `senior-auditor-sop.md` + `hacking-agents/execution-trace-agent.md` + `hacking-agents/shared-rules.md` |
-| `agent-5-bundle.md` | `senior-auditor-sop.md` + `hacking-agents/invariant-agent.md` + `hacking-agents/shared-rules.md` |
-| `agent-6-bundle.md` | `senior-auditor-sop.md` + `hacking-agents/periphery-agent.md` + `hacking-agents/shared-rules.md` |
-| `agent-7-bundle.md` | `senior-auditor-sop.md` + `hacking-agents/first-principles-agent.md` + `hacking-agents/shared-rules.md` |
-| `agent-8-bundle.md` | `senior-auditor-sop.md` + `hacking-agents/asymmetry-agent.md` + `hacking-agents/shared-rules.md` |
-| `agent-9-bundle.md` | `senior-auditor-sop.md` + `hacking-agents/boundary-agent.md` + `hacking-agents/shared-rules.md` |
-| `agent-10-bundle.md` | `senior-auditor-sop.md` + `hacking-agents/numerical-gap-agent.md` + `hacking-agents/shared-rules.md` |
-| `agent-11-bundle.md` | `senior-auditor-sop.md` + `hacking-agents/trust-gap-agent.md` + `hacking-agents/shared-rules.md` |
-| `agent-12-bundle.md` | `senior-auditor-sop.md` + `hacking-agents/flow-gap-agent.md` + `hacking-agents/shared-rules.md` |
-
-Print line counts for `source.md` and every bundle. An undersized bundle means a broken `cat` and must be caught before agents launch, not after twelve agents return empty.
-
-**Never inline source code into an Agent prompt.** The prompt points at the bundle file and the agent reads it. Inlining multiplies token cost by twelve and truncates on large codebases.
-
-Each agent gets its own lens only. Handing all twelve specialties to every agent defeats the design — the lenses are supposed to be independent so their overlap is evidence rather than an echo.
-
-### Turn 2b — Context package
-
-Every agent also gets, when available: the protocol README, known issues (to avoid duplicate reports), documented design decisions, deployment context (target chains, upgrade strategy), external dependencies, and prior audit reports with resolution status.
-
-If `xray-pre-audit` has been run, its `x-ray/x-ray.md` output is the best available context package — it already contains the threat model, invariant list, and entry-point classification.
-
-### Turn 2c — Pre-flight
+Run in the audited repo, writing outputs only under the scan directory:
 
 ```bash
-forge build --deny-warnings           # must compile clean
-forge test --summary                  # establish a baseline
-slither . --filter-paths "test|script|node_modules" --json slither-report.json
-forge tree > dependency-tree.txt
+forge build --deny-warnings
+forge test --summary
+slither . --filter-paths "test|script|node_modules|lib" --json .solidity-auditor/runs/{stamp}/slither-report.json
+forge tree > .solidity-auditor/runs/{stamp}/dependency-tree.txt
 ```
 
-### Turn 3a — Spawn all twelve agents
+`forge build` and `forge test` write only to `out/` and `cache/`, which the scan excludes. A build failure is not a stopper — note it in the context package and continue; the agents read source, not artifacts. If the project is not a Foundry project, skip the `forge` steps and say so.
 
-One message, twelve parallel background Agent calls (`run_in_background=true`), `model={agent_model}`. Single phase, no later spawns. You will be notified as each completes — do not poll or sleep.
+### Turn 3a — Agent mapping
 
-Agents 1–9 use the single-specialty prompt; agents 10–12 use the gap-hunter prompt.
-
-**Single-specialty prompt (agents 1–9):**
-
-```
-You are an attacker. Your specialty, mindset, source, and output rules
-are in your bundle. Read it fully before producing findings.
-
-Read first:
-- {bundle_dir}/agent-N-bundle.md (XXXX lines) — source + SOP + specialty + shared rules.
-
-The bundle contains all in-scope source. Do NOT re-read in-scope files
-for the initial scan. Use Read/Grep only for cross-file searches or
-out-of-scope context (interfaces/, lib/, mocks/, test/).
-
-What a finding looks like:
-- file, function
-- root cause — the one-sentence code-level defect
-- minimal fix — the smallest change that eliminates the defect
-- proof — concrete numbers, a trace, or quoted code
-
-Without concrete proof, it's a LEAD, not a finding. Leads are honest
-about what you couldn't verify — they're not failures, they're
-calibration. Emit them.
-
-Don't skim. Don't trust your first read. Trust your discomfort.
-
-Output format: see shared-rules.md inside your bundle.
-```
-
-**Gap-hunter prompt (agents 10–12):** identical, except the finding shape adds `seam — which two or three lenses combine`, the proof must demonstrate the seam, and the closing line points at the gap-hunter-specific output fields in the specialty file.
-
-### Turn 3b — Wait
-
-Proceed only once all twelve have notified completion. Let them run to natural completion; do not start dedup early and do not poll.
-
-### Turn 4 — Deduplicate, judge, report
-
-Single pass: dedup, gate, and produce the final report in one turn. Do not print an intermediate dedup list.
-
-1. **Dedup** per the four hard gates below.
-2. **Gate** each deduped finding through the four gates in `judging.md`, in order, no skipping and no revisiting after a verdict.
-3. **Promote or reject leads** per `judging.md`.
-4. **Classify severity** and attach PoCs per the addendum in `judging.md`.
-5. **Format and print** per `report-formatting.md`. With `--file-output`, also write the file.
-6. **Auto-clean:** `rm -rf {bundle_dir}`. It is transient build state, not an artifact. For debugging, copy it elsewhere before re-running.
-
----
-
-## Deduplication Gates
-
-Group findings by `group_key` (`Contract | function | bug-class`). Exact match first, then merge synonymous `bug_class` values within the same `(Contract, function)`. Keep the best item per group, number sequentially, annotate `[agents: N]`.
-
-Four gates govern this phase. They exist because the failure mode of naive merging is silently deleting real bugs — twelve agents converging on one function is *information*, not redundancy.
-
-**Gate A — Function isolation (HARD).** NEVER merge across different `function:` values. Dedup only within `(Contract, function)`. A different function is a different bug, always.
-
-**Gate B — Wide description.** A merged group whose constituents describe distinct mechanisms — different `fix:`, different code-level cause, or different attack path — MUST list every mechanism. One function can host several coexisting bugs at the same `group_key` and all of them must appear.
-
-**Gate C — Function-level second pass.** After `group_key` dedup, run a second pass at `(Contract, function)` ignoring `bug_class` entirely. Agents often tag coexisting bugs with different `bug_class` values while referencing multiple mechanisms in the body text. For every `(Contract, function)` with multiple final findings, scan the description, path, proof, and fix of every constituent for distinct mechanisms crossing `bug_class` boundaries. Every mechanism appearing in any constituent body must survive into at least one final finding. This pass stays *within* `(Contract, function)` — never across, per Gate A.
-
-**Gate D — Fix preservation (HARD).** Before writing a merged `fix:` for a `(Contract, function)` with multiple findings:
-
-1. Collect every raw `fix:` from every agent that flagged the tuple.
-2. Group them by ADD-lines (the `+` lines, or the equivalent require/assignment).
-3. Two fixes are distinct if their ADD-lines differ in the called function or expression (`require(msg.value == amount)` vs `require(zrc20 != _ETH_ADDRESS_)`), the check direction (validate / restrict / ban), or the checked parameter.
-4. Two or more distinct fixes are presented as Option A, Option B, … — one block each, **verbatim** from the agent's text, no paraphrase.
-5. Label each intuitively: validate / restrict / allow-and-handle / ban-path.
-
-Before printing, count the distinct fixes in the raw output for that `(Contract, function)`. Two or more distinct but only one shown is a violation — add the alternatives.
-
-**Completeness check (HARD).** Before printing the report, enumerate every unique `(Contract, function, bug-class)` in any raw FINDING or LEAD across all twelve agents. Every unique `(Contract, function)` must have at least one item in the final report; zero means a silent drop, so fix it. Multiple `bug_class` values within one `(Contract, function)` may collapse into a single wide-description item, but the `(Contract, function)` itself must survive. Print this line before the report:
-
-```
-Completeness: N unique (Contract, function) in raw, N covered in final.
-```
-
-**Composite chains.** If finding A's output feeds finding B's precondition AND the combined impact exceeds either alone, add `Chain: [A] + [B]` at `confidence = min(A, B)`. Most audits produce zero to two.
-
----
-
-## Verifying the agents did the work
-
-`shared-rules.md` binds every agent to three mental tools from `senior-auditor-sop.md`, each with a trigger that requires a literal marker in the agent's output: `[Feynman: <name>]` when it opens a new function, `[Socratic: <file:line> — why?]` when it stops on an unclear line, `[Inversion: <function>]` when a path reads as clean.
-
-After each agent returns, grep its output for those markers. An agent that returns findings with no markers did not reason — it scanned. Note the shortfall as a workflow violation and weight that agent's findings accordingly; consider re-running it.
-
----
-
-## EVM Cortex Agent Mapping
+Use the two prompt templates in `references/agent-prompts.md` verbatim, substituting `{bundle_dir}`, the agent number, and the bundle's real line count. The READ-ONLY paragraph is unconditional; the "Known findings" paragraph appears only when memory is on and `known-findings.md` was appended. Spawn all twelve as parallel background Agent calls with these `subagent_type` values:
 
 | # | Lens | `subagent_type` | Model |
 |---|------|-----------------|-------|
@@ -232,45 +113,141 @@ After each agent returns, grep its output for those markers. An agent that retur
 | 11 | Trust Gap | `mev-analyst` | opus |
 | 12 | Flow Gap | `sleuth` | opus |
 
-The `subagent_type` selects a base persona and tool set; **the specialty file in the bundle is what determines the lens.** Reused types (`depth-token-flow`, `mev-analyst`, `sleuth`) run as independent instances with different bundles and share no context.
+The `subagent_type` selects a base persona and tool set; **the specialty file in the bundle is what determines the lens.** Reused types (`depth-token-flow`, `mev-analyst`, `sleuth`) run as independent instances with different bundles and share no context. The Model column is the default when Turn 1b set no `{agent_model}`; when it did, agents 1–9 take the runner's choice and 10–12 stay on opus.
 
-PoC construction for Critical and High findings routes to `security-verifier` or `poc-writer` after Turn 4.
+### Verifying the agents did the work
+
+`shared-rules.md` binds every agent to three mental tools from `senior-auditor-sop.md`, each with a trigger that requires a literal marker in the agent's output: `[Feynman: <name>]` when it opens a new function, `[Socratic: <file:line> — why?]` when it stops on an unclear line, `[Inversion: <function>]` when a path reads as clean.
+
+After each agent returns, grep its output for those markers. An agent that returns findings with no markers did not reason — it scanned. Note the shortfall as a workflow violation and weight that agent's findings accordingly. Do not respawn it: in loop mode the next pass covers the same lens for free, and on a 1-pass scan a retry costs an unbounded wait for one twelfth of the coverage.
+
+### Turn 4 — Severity line (EVM Cortex insertion, every pass)
+
+Follow `references/dedup-and-assembly.md` Turn 4 step by step. Between step 3 (lead promotion) and step 4 (memory tag), classify every gated **FINDING** per the severity addendum in `judging.md` — impact × likelihood from the global severity matrix, assigned independently of confidence. LEADs are not classified.
+
+In step 5a, write the severity into the finding block's body as one structured line between the Description and the Fix:
+
+````markdown
+**Description**
+<one sentence>
+
+**Severity** High · Impact High · Likelihood Likely
+
+**Fix**
+...
+````
+
+The assembler pastes the body through unchanged, so the line reaches the report without any change to `assemble.sh`. It is a structured field, not prose: `report-language.md` rule 10 (no `critical`, `severe` in sentences) governs sentences and does not reach it. Use exactly one of `Critical`, `High`, `Medium`, `Low`, `Informational`, and keep the `**Severity** ` prefix and ` · ` separators exactly — Turn 6 extracts the value by shell.
+
+### Turn 5 — Assemble, print, clean
+
+Follow `references/dedup-and-assembly.md` Turn 5 unchanged. Do not re-word, re-order, add to, or summarize `full-report.md`. The `--file-output` copy is named `{project-name}-pashov-ai-audit-report-{stamp}.md`.
+
+### Turn 6 — Severity and PoC annex (EVM Cortex, once per scan)
+
+Runs after Turn 5, at any pass count. It reads `full-report.md` and never writes to it.
+
+1. **Extract the severity table by shell, never by hand.** One `awk` over the assembled file; the `#` column is the finding's number in `full-report.md`:
+
+```bash
+REPORT=.solidity-auditor/runs/{stamp}/full-report.md
+awk -v OFS='\t' '
+function rank(s){ return (s=="Critical")?0:(s=="High")?1:(s=="Medium")?2:(s=="Low")?3:(s=="Informational")?4:5 }
+function flush(){ if (want) { n++; print rank(sev), conf+0, "| " n " | " sev " | [" conf "] | " title " | `" loc "` |"; want=0 } }
+/^\[[0-9]+\] \*\*[0-9]+\. / { flush(); match($0,/^\[[0-9]+\]/); conf=substr($0,RSTART+1,RLENGTH-2)
+  t=$0; sub(/^\[[0-9]+\] \*\*[0-9]+\. /,"",t); sub(/\*\*[ \t]*$/,"",t); title=t; want=1; sev="Unclassified"; loc=""; next }
+want && loc=="" && /^`/ { match($0,/^`[^`]*`/); loc=substr($0,RSTART+1,RLENGTH-2); next }
+want && /^\*\*Severity\*\* / { s=$0; sub(/^\*\*Severity\*\* /,"",s); sub(/ ·.*$/,"",s); sev=s; next }
+/^Findings List/ { flush() }
+END { flush() }
+' "$REPORT" | sort -t$'\t' -k1,1n -k2,2nr | cut -f3 > .solidity-auditor/runs/{stamp}/severity-rows.md
+wc -l < .solidity-auditor/runs/{stamp}/severity-rows.md
+```
+
+The row count must equal `F` from Turn 5 step 3. If it does not, the annex says so in words and lists what it could read — it never claims to cover more than it does. A finding whose block lacks a severity line prints as `Unclassified`; leave it so and say why, rather than editing the assembled report.
+
+2. **Write `.solidity-auditor/runs/{stamp}/severity-annex.md`:**
+
+````markdown
+# Severity annex — <project-name>
+
+_EVM Cortex layer over `full-report.md` (same stamp). Severity is impact × likelihood per the global severity matrix and is independent of confidence. `#` is the finding's number in the report. Rows: N of F findings._
+
+| # | Severity | Confidence | Title | Location |
+|---|---|---|---|---|
+<severity-rows.md, verbatim>
+
+## Proof of concept
+
+_Critical and High findings require a working Foundry PoC before they are reported at that severity. Medium findings need a PoC or a step-by-step reproduction._
+
+| # | Severity | PoC | Status |
+|---|---|---|---|
+| 3 | Critical | `.solidity-auditor/runs/{stamp}/poc/Exploit_3.t.sol` | passes · fork block 19_000_000 |
+| 7 | High | — | pending — routed to poc-writer |
+````
+
+3. **Route PoCs.** For every Critical and High finding, spawn `security-verifier` or `poc-writer` with the finding block and the source it names. PoC tests are written **only** under `.solidity-auditor/runs/{stamp}/poc/` — never into the project's `test/` — and run with the test directory overridden so the project tree stays untouched:
+
+```bash
+FOUNDRY_TEST=.solidity-auditor/runs/{stamp}/poc forge test --match-path '.solidity-auditor/runs/{stamp}/poc/*' -vvv
+```
+
+Pin the fork block in every fork-based PoC. A Critical or High finding whose PoC fails is downgraded in the annex with a one-line reason; the severity line in the run file is left as written — the run file is the pass's record, the annex is this turn's verdict.
+
+4. **Fix verification** for findings at or above the threshold, per the `judging.md` addendum: trace the fix against the attack path, run the side-effect checklist, and pattern-check the rest of the codebase for the same defect.
+
+5. **Print** a five-number summary and the annex path, nothing else:
+
+```
+Severity: Critical N · High N · Medium N · Low N · Informational N — annex: .solidity-auditor/runs/{stamp}/severity-annex.md
+```
+
+With `--file-output`, also copy the annex to `{project-name}-pashov-ai-audit-severity-{stamp}.md` beside the report copy.
+
+---
+
+## Deduplication gates (summary)
+
+The procedure is `references/dedup-and-assembly.md` Turn 4 step 1 and is followed from there, not from here. The gates are hard, and the failure mode they exist for is silently deleting real bugs — twelve agents converging on one function is *information*, not redundancy:
+
+- **Canonicalise the bug-class label** (new in v4) — one label per (Contract, function) before grouping: the repository's own label from `known-findings.md` wins, then the majority label, then the shortest label that names the defect. Without it one bug becomes three ledger records and is never recognised again.
+- **Function isolation** — never merge across `function:` values. A different function is a different bug, always.
+- **Wide description** — a merged group with distinct mechanisms lists every mechanism.
+- **Function-level second pass** — at (Contract, function) ignoring `bug_class`, every mechanism in any constituent body survives into a final finding.
+- **Fix preservation** — distinct fixes are shown verbatim as Option A, Option B, … with intuitive labels.
+- **Completeness** — every unique (Contract, function) in raw output has at least one item in the run file; print `Completeness: N unique (Contract, function) in raw, N covered in final.`
+
+Composite chains: `Chain: [A] + [B]` at `confidence = min(A, B)` when A's output feeds B's precondition and the combined impact exceeds either alone. Most audits produce zero to two.
 
 ---
 
 ## Pre-Audit Checklist
 
-- [ ] All in-scope files identified via the exclude pattern
+- [ ] All in-scope files identified with the exact `find` command in `orchestration.md` (deploy scripts in, build and dependency dirs out)
 - [ ] `xray-pre-audit` run, or an equivalent context package assembled
-- [ ] Bundle directory created; `source.md` plus twelve agent bundles built
-- [ ] Line counts printed for `source.md` and every bundle, and none is undersized
-- [ ] Context package assembled (README, known issues, design docs, prior audits)
-- [ ] `forge build --deny-warnings` passes clean
-- [ ] `forge test` passes with no failures
-- [ ] Slither baseline report generated
-- [ ] Known issues documented to avoid duplicate findings
-- [ ] Local `VERSION` checked against upstream
+- [ ] Local `VERSION` (4) checked against upstream
+- [ ] `{stamp}` computed once; `.solidity-auditor/runs/{stamp}/scope.tsv` opened with `name`, `mode`, `files`
+- [ ] Pass count and model settled in one `AskUserQuestion`; `passes_planned` written
+- [ ] Memory on → ledger validated (`#solidity-auditor-memory v1`, 6 columns) or the scan stopped
+- [ ] `source.md` built once; twelve bundles built per pass, each ending with `report-language.md` (+ `context.md`, + `known-findings.md` when present); line counts printed and none undersized
+- [ ] Foundry pre-flight run; outputs under the scan directory only
+- [ ] `.solidity-auditor/` gitignored in the audited repo (reminder printed if not)
 
 ## Post-Audit Checklist
 
-- [ ] All twelve agents returned findings
+- [ ] All twelve agents returned; any loss recorded in the pass summary line, the run-file header, and `pass_K_agents`
 - [ ] Mental-tool marker counts verified per agent
-- [ ] Findings grouped by `group_key`; function isolation respected (Gate A)
-- [ ] Wide-description gate applied to every merged group (Gate B)
-- [ ] Function-level second pass run across `bug_class` boundaries (Gate C)
-- [ ] Distinct fixes preserved verbatim as Option A/B/… (Gate D)
-- [ ] `Completeness: N / N` line printed and reconciled
-- [ ] Composite chains identified
-- [ ] Every finding run through all four judging gates in order, one pass, no revisiting
-- [ ] Confidence scored from 100 with documented deductions
+- [ ] Bug-class labels canonicalised; function isolation, wide description, second pass, fix preservation, and the completeness line applied per pass
+- [ ] Every finding run through the four judging gates in order, one pass, no revisiting
 - [ ] LEADs promoted or rejected with justification; no deployer-intent reasoning used
-- [ ] Severity assigned per the matrix in `judging.md`
-- [ ] Foundry PoC written for every Critical and High finding
-- [ ] Fix verification completed for confidence ≥ 80 findings
-- [ ] Fix pattern-check run across the rest of the codebase
-- [ ] Report ordered by severity then confidence; sub-80 findings carry no fix block
-- [ ] Agent attribution table completed
-- [ ] Bundle directory deleted
+- [ ] Every gated FINDING carries a `**Severity**` line in its run-file block
+- [ ] Every run file uses the exact `<!--F …-->` / `<!--/F-->` markers; `assemble.sh` reported no structure break
+- [ ] `full-report.md` printed word for word (20 findings or fewer) or as the counted top-3 slice (more than 20); never re-worded
+- [ ] Memory on → `memory.tsv` written atomically via `.tmp`; `mem_after` and `mem_sha` recorded
+- [ ] Annex row count equals `F`; Foundry PoC passing for every Critical and High, under `.solidity-auditor/runs/{stamp}/poc/`
+- [ ] Fix verification and codebase pattern-check completed for findings at or above 75
+- [ ] Bundle directory deleted; nothing written outside `.solidity-auditor/` except `--file-output` copies
 
 ---
 
