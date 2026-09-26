@@ -42,17 +42,25 @@ ERCs (Ethereum Request for Comments) are a category of EIPs scoped to applicatio
 | 7918 | Blob base fee bounded | Blob base fee can't drop below execution gas cost equivalent. |
 | 7934 | RLP block size limit | Limits serialized block size. |
 
-### Fusaka (targeting late 2026)
+### Fusaka (live, December 3, 2025)
 | EIP | Title | Impact |
 |-----|-------|--------|
 | 7594 | PeerDAS | Peer Data Availability Sampling. Major L2 scaling improvement. |
 | 7892 | Blob-only hardforks | Enables blob parameter changes without full hard fork. |
 
-### Glamsterdam (targeting 2027+)
+### Glamsterdam (in progress, targeting Q3-Q4 2026 — dates slip)
 | EIP | Title | Impact |
 |-----|-------|--------|
 | 7732 | Enshrined PBS (ePBS) | Proposer-Builder Separation in protocol. Removes MEV-Boost relay dependency. |
 | 7928 | Block Access Lists | Contracts declare state access upfront. Enables parallel EVM execution. |
+
+FOCIL (fork-choice inclusion lists) was removed from Glamsterdam scope to reduce complexity. Check [forkcast.org](https://forkcast.org) for the current SFI list before quoting scope.
+
+### Hegota (targeting Q4 2026)
+Does **not** contain Verkle trees. Verkle was the statelessness candidate for years, then deprioritized in 2024-2025 over quantum-resistance and ZK-compatibility concerns. Ethereum may move to a binary state tree instead (EIP-7864, Draft as of March 2026). Check https://forkcast.org/upgrade/hegota for confirmed scope.
+
+### Checking whether a feature is actually scheduled
+Roadmap diagrams and blog posts older than six months are aspirational. The status that matters is the fork relationship on [forkcast.org](https://forkcast.org), defined in EIP-7723: **CFI** (Considered for Inclusion — being evaluated, implementation starting), **SFI** (Scheduled for Inclusion — in devnets, ships barring disasters), **DFI** (Declined for Inclusion — rejected for that fork). Only SFI means "coming in fork X". For what client teams are saying, read the public [eth-rnd-archive](https://github.com/ethereum/eth-rnd-archive); for the canonical spec, prefer [execution-specs](https://github.com/ethereum/execution-specs) and [consensus-specs](https://github.com/ethereum/consensus-specs) over EIP text, which may have been modified during implementation.
 
 ## EVM Opcodes (Developer-Critical Finals)
 
