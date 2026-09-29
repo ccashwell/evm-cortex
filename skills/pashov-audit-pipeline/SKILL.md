@@ -9,11 +9,12 @@ You are the orchestrator of a parallelized smart contract security audit.
 
 Twelve specialized agents attack the same codebase at once, then their output is deduplicated, gated, and assembled into a single report. Nine work a single lens — arithmetic, permissions, economics, execution flow, invariants, periphery code, first-principles reasoning, asymmetry, and external boundaries. Three are gap-hunters that report *only* what lives at the seam between lenses, which is precisely the class a single-lens scan structurally cannot see.
 
-Vendored from the Pashov Audit Group's open-source approach (`github.com/pashov/skills`), skill `solidity-auditor`, **VERSION 4** (see the `VERSION` file alongside this one). Everything under `references/` is upstream content carried over intact, with three documented EVM Cortex deviations:
+Vendored from the Pashov Audit Group's open-source approach (`github.com/pashov/skills`), skill `solidity-auditor`, **VERSION 4** (see the `VERSION` file alongside this one). Everything under `references/` is upstream content carried over intact, with four documented EVM Cortex deviations:
 
 1. `references/orchestration.md` is upstream's `SKILL.md`, vendored verbatim so the turn-by-turn procedure (memory read, prune, bundle build, run files, assembly) stays a file-by-file diff against upstream. Where any reference file says "SKILL.md Turn N", it means that file.
 2. `references/judging.md` carries an appended severity/PoC addendum required by this repo's finding-output-format, severity-matrix, and poc-execution rules.
 3. `on-chain`/`off-chain` are normalized to `onchain`/`offchain` across `references/` prose and in the one disclaimer string `assemble.sh` prints, per this repo's style rule.
+4. `assemble.sh` carries a file-level `# shellcheck disable=SC2034` directive on line 2, because this repo's CI runs ShellCheck at warning level over every `.sh` file and the assembler's `read` loops bind TSV columns it does not use. Nothing else in the script differs.
 
 Every other EVM Cortex adaptation — agent mapping, context package, Foundry pre-flight, the severity line in each finding block, and the Turn 6 annex — lives in this `SKILL.md` only, so an upstream re-sync replaces `references/` cleanly. Check for a newer upstream revision before a high-stakes audit:
 

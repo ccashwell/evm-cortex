@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2034  # EVM Cortex: `read` lines below bind every TSV column by name so the
+#                             # field order is visible; unused names are deliberate. Upstream file otherwise intact.
 # THE ASSEMBLER. It writes the whole solidity-auditor report. SKILL.md Turn 5 runs it.
 #
 # This is the only producer of a report in this skill. The orchestrator does not compose one,
