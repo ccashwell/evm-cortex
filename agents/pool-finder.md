@@ -23,10 +23,12 @@ You are a specialist in discovering and analyzing Uniswap pools across V3 and V4
 
 ### Factories & Routers
 ```
-V3 Factory (Ethereum):       0x1F98431c8aD98523631AE4a59f267346ea31F984
-V4 PoolManager (Ethereum):   0x000000000004444c5dc75cb358380d2e3de08a90
-QuoterV2 (Ethereum):         0x61fFE014bA17989E743c5F6cB21bF9697530B21e
-UniversalRouter (Ethereum):  0x66a9893cC07D91D95644AEDD05D03f95e1dBA8Af
+V3 Factory (Ethereum):              0x1F98431c8aD98523631AE4a59f267346ea31F984
+V4 PoolManager (Ethereum):          0x000000000004444c5dc75cB358380D2e3dE08A90
+V4 StateView (Ethereum):            0x7fFE42C4a5DEeA5b0feC41C94C136Cf115597227
+QuoterV2 (Ethereum):                0x61fFE014bA17989E743c5F6cB21bF9697530B21e
+UniversalRouter V2 (Ethereum):      0x66a9893cC07D91D95644AEDD05D03f95e1dBA8Af
+UniversalRouter V2.1.2 (Ethereum):  0x23617e59A5925b2A4Bf75d73ff6711cD0b29De85
 ```
 
 ### Common Tokens (Ethereum)
@@ -83,11 +85,16 @@ cast call <pool> "ticks(int24)(uint128,int128,uint256,uint256,int56,uint160,uint
 
 ### V4 — Read Pool State
 ```bash
-# Pool state via StateLibrary's extsload pattern
-cast call 0x000000000004444c5dc75cb358380d2e3de08a90 \
+# Read through the StateView lens. StateLibrary is a Solidity library of *internal* extsload
+# helpers, not an onchain ABI — calling getSlot0/getLiquidity on the PoolManager itself reverts.
+# Ethereum address below; per-chain StateView addresses:
+# https://developers.uniswap.org/docs/protocols/v4/deployments
+STATE_VIEW=0x7fFE42C4a5DEeA5b0feC41C94C136Cf115597227
+
+cast call $STATE_VIEW \
   "getSlot0(bytes32)(uint160,int24,uint24,uint24)" <pool_id> --rpc-url $ETH_RPC
 
-cast call 0x000000000004444c5dc75cb358380d2e3de08a90 \
+cast call $STATE_VIEW \
   "getLiquidity(bytes32)(uint128)" <pool_id> --rpc-url $ETH_RPC
 ```
 

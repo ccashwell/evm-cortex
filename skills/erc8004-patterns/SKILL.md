@@ -7,7 +7,7 @@ description: Use when integrating ERC-8004 onchain agent identity. Covers agent 
 
 ## Overview
 
-ERC-8004 establishes a standard for AI agent identity onchain. Deployed in January 2026 across 20+ chains, it provides a registry for agents to declare their identity, capabilities, and trust relationships. This enables verifiable agent-to-agent and agent-to-protocol interactions.
+ERC-8004 establishes a standard for AI agent identity onchain. Deployed on January 29, 2026 across 20+ chains, it provides a registry for agents to declare their identity, capabilities, and trust relationships. This enables verifiable agent-to-agent and agent-to-protocol interactions.
 
 ## Core Interface
 
@@ -201,7 +201,12 @@ ERC-8004 is deployed at the same address on 20+ chains. Query the registry on an
 import { createPublicClient, http } from 'viem';
 import { base, optimism, arbitrum } from 'viem/chains';
 
-const ERC8004_REGISTRY = '0x...'; // Same address on all chains
+// ERC-8004 registries (same addresses on 20+ chains). Verified with `cast code` on
+// Ethereum mainnet and Base, 2026-09-25 — re-verify on any other chain before use.
+// Source: https://ethskills.com/why/SKILL.md, https://www.8004.org
+const ERC8004_IDENTITY_REGISTRY = '0x8004A169FB4a3325136EB29fA0ceB6D2e539a432';
+const ERC8004_REPUTATION_REGISTRY = '0x8004BAa17C55a88189AE136b182e5fdA19dE9b63';
+const ERC8004_REGISTRY = ERC8004_IDENTITY_REGISTRY;
 
 async function checkAgentOnChain(agentAddress: `0x${string}`, chain: any) {
   const client = createPublicClient({ chain, transport: http() });

@@ -23,6 +23,7 @@ import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
 import {Currency, CurrencyLibrary} from "v4-core/src/types/Currency.sol";
 import {BalanceDelta} from "v4-core/src/types/BalanceDelta.sol";
+import {SwapParams, ModifyLiquidityParams} from "v4-core/src/types/PoolOperation.sol";
 import {Hooks} from "v4-core/src/libraries/Hooks.sol";
 import {TickMath} from "v4-core/src/libraries/TickMath.sol";
 import {StateLibrary} from "v4-core/src/libraries/StateLibrary.sol";
@@ -35,7 +36,7 @@ contract MyHookTest is Test, Deployers {
     using CurrencyLibrary for Currency;
 
     MyHook hook;
-    PoolKey key;
+    // `PoolKey key` is inherited from Deployers; redeclaring it is a DeclarationError
     PoolId poolId;
 
     function setUp() public {
@@ -51,7 +52,7 @@ contract MyHookTest is Test, Deployers {
 
         modifyLiquidityRouter.modifyLiquidity(
             key,
-            IPoolManager.ModifyLiquidityParams({
+            ModifyLiquidityParams({
                 tickLower: -120,
                 tickUpper: 120,
                 liquidityDelta: 10 ether,
@@ -78,7 +79,11 @@ contract MyHookTest is Test, Deployers {
 | `SQRT_PRICE_1_4` | `uint160` | sqrtPriceX96 for a 1:4 price ratio |
 | `SQRT_PRICE_4_1` | `uint160` | sqrtPriceX96 for a 4:1 price ratio |
 | `ZERO_BYTES` | `bytes` | Empty bytes constant for hookData |
-| `MAX_TICK_SPACING` | `int24` | Maximum allowed tick spacing |
+| `MIN_PRICE_LIMIT` | `uint160` | `TickMath.MIN_SQRT_PRICE + 1`, price limit for zeroForOne swaps |
+| `MAX_PRICE_LIMIT` | `uint160` | `TickMath.MAX_SQRT_PRICE - 1`, price limit for oneForZero swaps |
+| `LIQUIDITY_PARAMS` | `ModifyLiquidityParams` | Default add-liquidity params |
+| `REMOVE_LIQUIDITY_PARAMS` | `ModifyLiquidityParams` | Default remove-liquidity params |
+| `SWAP_PARAMS` | `SwapParams` | Default exact-input swap (`amountSpecified: -100`, zeroForOne) |
 
 ### Key Deployer Functions
 
@@ -98,7 +103,9 @@ deployFreshManager();
 Hook addresses encode permissions in their leading bits. `HookMiner` brute-forces a CREATE2 salt that produces an address with the correct bit pattern.
 
 ```solidity
-import {HookMiner} from "v4-periphery/src/utils/HookMiner.sol";
+// HookMiner left v4-periphery/src on 2026-02-06 (PR #510); it now lives under test/shared
+import {HookMiner} from "v4-periphery/test/shared/HookMiner.sol";
+// or: import {HookMiner} from "v4-hooks-public/src/utils/HookMiner.sol"; (byte-identical)
 
 function _deployHook() internal {
     uint160 flags = uint160(
@@ -162,9 +169,9 @@ function test_swapExactInput_zeroForOne() public {
 
     BalanceDelta delta = swapRouter.swap(
         key,
-        IPoolManager.SwapParams({
+        SwapParams({
             zeroForOne: true,
-            amountSpecified: 1 ether,  // positive = exact input
+            amountSpecified: -1 ether,  // negative = exact input
             sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1
         }),
         PoolSwapTest.TestSettings({
@@ -187,17 +194,17 @@ function test_swapExactInput_zeroForOne() public {
 function test_swapExactOutput_oneForZero() public {
     BalanceDelta delta = swapRouter.swap(
         key,
-        IPoolManager.SwapParams({
+        SwapParams({
             zeroForOne: false,
-            amountSpecified: -0.5 ether,  // negative = exact output
+            amountSpecified: 0.5 ether,  // positive = exact output
             sqrtPriceLimitX96: TickMath.MAX_SQRT_PRICE - 1
         }),
         PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false}),
         ZERO_BYTES
     );
 
-    assertEq(delta.amount0(), -0.5 ether, "should receive exactly 0.5 token0");
-    assertGt(delta.amount1(), 0, "should spend token1");
+    assertEq(delta.amount0(), 0.5 ether, "should receive exactly 0.5 token0");
+    assertLt(delta.amount1(), 0, "should spend token1");
 }
 ```
 
@@ -205,10 +212,10 @@ function test_swapExactOutput_oneForZero() public {
 
 | `zeroForOne` | `amountSpecified` | Meaning |
 |---|---|---|
-| `true` | `> 0` | Exact input of token0, receive token1 |
-| `true` | `< 0` | Receive exact output of token1, spend token0 |
-| `false` | `> 0` | Exact input of token1, receive token0 |
-| `false` | `< 0` | Receive exact output of token0, spend token1 |
+| `true` | `< 0` | Exact input of token0, receive token1 |
+| `true` | `> 0` | Receive exact output of token1, spend token0 |
+| `false` | `< 0` | Exact input of token1, receive token0 |
+| `false` | `> 0` | Receive exact output of token0, spend token1 |
 
 ### Price Limits
 
@@ -234,9 +241,9 @@ function testFuzz_swap(uint256 amountIn, bool zeroForOne) public {
 
     BalanceDelta delta = swapRouter.swap(
         key,
-        IPoolManager.SwapParams({
+        SwapParams({
             zeroForOne: zeroForOne,
-            amountSpecified: int256(amountIn),
+            amountSpecified: -int256(amountIn),  // negative = exact input
             sqrtPriceLimitX96: priceLimit
         }),
         PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false}),
@@ -264,7 +271,7 @@ function test_addLiquidity() public {
 
     BalanceDelta delta = modifyLiquidityRouter.modifyLiquidity(
         key,
-        IPoolManager.ModifyLiquidityParams({
+        ModifyLiquidityParams({
             tickLower: -600,
             tickUpper: 600,
             liquidityDelta: 5 ether,
@@ -289,7 +296,7 @@ function test_removeLiquidity() public {
 
     BalanceDelta delta = modifyLiquidityRouter.modifyLiquidity(
         key,
-        IPoolManager.ModifyLiquidityParams({
+        ModifyLiquidityParams({
             tickLower: -120,
             tickUpper: 120,
             liquidityDelta: -5 ether,  // negative = remove
@@ -320,7 +327,7 @@ function test_addLiquidity_outOfRange() public {
 
     BalanceDelta delta = modifyLiquidityRouter.modifyLiquidity(
         key,
-        IPoolManager.ModifyLiquidityParams({
+        ModifyLiquidityParams({
             tickLower: tickLower,
             tickUpper: tickUpper,
             liquidityDelta: 1 ether,
@@ -344,9 +351,9 @@ function test_hookCalledOnSwap() public {
 
     swapRouter.swap(
         key,
-        IPoolManager.SwapParams({
+        SwapParams({
             zeroForOne: true,
-            amountSpecified: 1 ether,
+            amountSpecified: -1 ether,
             sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1
         }),
         PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false}),
@@ -367,9 +374,9 @@ function test_hookReceivesCorrectParams() public {
     emit MyHook.BeforeSwapCalled(
         address(swapRouter),
         key,
-        IPoolManager.SwapParams({
+        SwapParams({
             zeroForOne: true,
-            amountSpecified: 1 ether,
+            amountSpecified: -1 ether,
             sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1
         }),
         hookData
@@ -377,9 +384,9 @@ function test_hookReceivesCorrectParams() public {
 
     swapRouter.swap(
         key,
-        IPoolManager.SwapParams({
+        SwapParams({
             zeroForOne: true,
-            amountSpecified: 1 ether,
+            amountSpecified: -1 ether,
             sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1
         }),
         PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false}),
@@ -397,9 +404,9 @@ function test_hookReturnsDelta() public {
 
     BalanceDelta delta = swapRouter.swap(
         key,
-        IPoolManager.SwapParams({
+        SwapParams({
             zeroForOne: true,
-            amountSpecified: 1 ether,
+            amountSpecified: -1 ether,
             sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1
         }),
         PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false}),
@@ -437,9 +444,9 @@ function test_poolStateAfterSwap() public {
 
     swapRouter.swap(
         key,
-        IPoolManager.SwapParams({
+        SwapParams({
             zeroForOne: true,
-            amountSpecified: 1 ether,
+            amountSpecified: -1 ether,
             sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1
         }),
         PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false}),
@@ -457,7 +464,9 @@ function test_poolLiquidity() public {
     uint128 totalLiquidity = manager.getLiquidity(poolId);
     assertGt(totalLiquidity, 0, "pool should have liquidity from setUp");
 
-    uint128 positionLiquidity = manager.getPositionLiquidity(
+    // StateLibrary.getPositionLiquidity takes (poolId, bytes32 positionId); the
+    // owner/tick/salt form is getPositionInfo, which also returns fee growth
+    (uint128 positionLiquidity,,) = manager.getPositionInfo(
         poolId,
         address(modifyLiquidityRouter),
         -120,
@@ -485,7 +494,7 @@ function test_dynamicFeeHook() public {
 
     modifyLiquidityRouter.modifyLiquidity(
         dynamicKey,
-        IPoolManager.ModifyLiquidityParams({
+        ModifyLiquidityParams({
             tickLower: -120,
             tickUpper: 120,
             liquidityDelta: 10 ether,
@@ -497,9 +506,9 @@ function test_dynamicFeeHook() public {
     // Swap under normal conditions → expect base fee
     BalanceDelta delta1 = swapRouter.swap(
         dynamicKey,
-        IPoolManager.SwapParams({
+        SwapParams({
             zeroForOne: true,
-            amountSpecified: 0.1 ether,
+            amountSpecified: -0.1 ether,
             sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1
         }),
         PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false}),
@@ -511,9 +520,9 @@ function test_dynamicFeeHook() public {
 
     BalanceDelta delta2 = swapRouter.swap(
         dynamicKey,
-        IPoolManager.SwapParams({
+        SwapParams({
             zeroForOne: true,
-            amountSpecified: 0.1 ether,
+            amountSpecified: -0.1 ether,
             sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1
         }),
         PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false}),
@@ -531,19 +540,23 @@ function test_dynamicFeeHook() public {
 contract V4ForkTest is Test {
     using StateLibrary for IPoolManager;
 
-    IPoolManager constant PM = IPoolManager(0x000000000004444c5dc75cB358380D2e3de08A90);
+    // EIP-55 checksum matters: Solidity rejects a mixed-case literal with a wrong checksum
+    IPoolManager constant PM = IPoolManager(0x000000000004444c5dc75cB358380D2e3dE08A90);
 
     function setUp() public {
-        vm.createSelectFork(vm.envString("ETH_RPC_URL"), 21_000_000);
+        // The PoolManager first has code at block 21_688_329 (2025-01-23); fork after that
+        vm.createSelectFork(vm.envString("ETH_RPC_URL"), 23_000_000);
     }
 
     function test_productionPoolState() public view {
-        // Construct the key for an existing pool
+        // Canonical live pool: native ETH / USDC, 0.05% fee, tickSpacing 10, no hook
+        // PoolId 0x21c67e77068de97969ba93d4aab21826d33ca12bb9f565d8496e8fda8a82ca27
+        // (initialized at block 21_688_545 on 2025-01-23, so any later fork block works)
         PoolKey memory liveKey = PoolKey({
-            currency0: Currency.wrap(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48), // USDC
-            currency1: Currency.wrap(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2), // WETH
-            fee: 3000,
-            tickSpacing: int24(60),
+            currency0: Currency.wrap(address(0)),                                  // native ETH
+            currency1: Currency.wrap(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48), // USDC
+            fee: 500,
+            tickSpacing: int24(10),
             hooks: IHooks(address(0))
         });
 
@@ -556,6 +569,18 @@ contract V4ForkTest is Test {
         // Deploy your hook to work with the production PoolManager
         // Useful for integration testing with real pool state
     }
+}
+```
+
+### L2 Fork (Unichain)
+
+PoolManager addresses differ per chain. On Unichain (chain ID 130, RPC `https://mainnet.unichain.org`) the PoolManager is `0x1F98400000000000000000000000000000000004` (verified with `cast code`); the Ethereum address has no code there.
+
+```solidity
+IPoolManager constant UNICHAIN_PM = IPoolManager(0x1F98400000000000000000000000000000000004);
+
+function setUp() public {
+    vm.createSelectFork(vm.envString("UNICHAIN_RPC_URL"));
 }
 ```
 
@@ -584,9 +609,9 @@ function test_hookGasOverhead() public {
     uint256 gasBefore = gasleft();
     swapRouter.swap(
         key,
-        IPoolManager.SwapParams({
+        SwapParams({
             zeroForOne: true,
-            amountSpecified: 1 ether,
+            amountSpecified: -1 ether,
             sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1
         }),
         PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false}),
@@ -603,9 +628,9 @@ function test_compareGasWithAndWithoutHook() public {
     uint256 gasBefore = gasleft();
     swapRouter.swap(
         key,
-        IPoolManager.SwapParams({
+        SwapParams({
             zeroForOne: true,
-            amountSpecified: 0.1 ether,
+            amountSpecified: -0.1 ether,
             sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1
         }),
         PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false}),
@@ -620,7 +645,7 @@ function test_compareGasWithAndWithoutHook() public {
     manager.initialize(bareKey, SQRT_PRICE_1_1);
     modifyLiquidityRouter.modifyLiquidity(
         bareKey,
-        IPoolManager.ModifyLiquidityParams({
+        ModifyLiquidityParams({
             tickLower: -120, tickUpper: 120,
             liquidityDelta: 10 ether, salt: bytes32(0)
         }),
@@ -630,9 +655,9 @@ function test_compareGasWithAndWithoutHook() public {
     gasBefore = gasleft();
     swapRouter.swap(
         bareKey,
-        IPoolManager.SwapParams({
+        SwapParams({
             zeroForOne: true,
-            amountSpecified: 0.1 ether,
+            amountSpecified: -0.1 ether,
             sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1
         }),
         PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false}),
@@ -642,7 +667,8 @@ function test_compareGasWithAndWithoutHook() public {
 
     uint256 overhead = gasWithHook - gasWithoutHook;
     emit log_named_uint("hook overhead (gas)", overhead);
-    assertLt(overhead, 50_000, "hook gas overhead too high");
+    // There is no universal hook gas threshold: record the overhead with
+    // `forge snapshot` and review regressions with `forge snapshot --check`
 }
 ```
 
@@ -655,7 +681,7 @@ contract HookHandler is Test, Deployers {
     using PoolIdLibrary for PoolKey;
 
     MyHook public hook;
-    PoolKey public key;
+    // `key` is inherited from Deployers
 
     constructor(MyHook _hook, PoolKey memory _key) {
         hook = _hook;
@@ -671,9 +697,9 @@ contract HookHandler is Test, Deployers {
 
         try swapRouter.swap(
             key,
-            IPoolManager.SwapParams({
+            SwapParams({
                 zeroForOne: zeroForOne,
-                amountSpecified: int256(amount),
+                amountSpecified: -int256(amount),  // negative = exact input
                 sqrtPriceLimitX96: priceLimit
             }),
             PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false}),
@@ -685,7 +711,7 @@ contract HookHandler is Test, Deployers {
         uint256 liquidity = bound(liquiditySeed, 1e16, 5 ether);
         try modifyLiquidityRouter.modifyLiquidity(
             key,
-            IPoolManager.ModifyLiquidityParams({
+            ModifyLiquidityParams({
                 tickLower: -600,
                 tickUpper: 600,
                 liquidityDelta: int256(liquidity),
@@ -705,7 +731,6 @@ contract MyHookInvariantTest is Test, Deployers {
     using PoolIdLibrary for PoolKey;
 
     MyHook hook;
-    PoolKey key;
     PoolId poolId;
     HookHandler handler;
 
@@ -720,7 +745,7 @@ contract MyHookInvariantTest is Test, Deployers {
 
         modifyLiquidityRouter.modifyLiquidity(
             key,
-            IPoolManager.ModifyLiquidityParams({
+            ModifyLiquidityParams({
                 tickLower: -600, tickUpper: 600,
                 liquidityDelta: 100 ether, salt: bytes32(0)
             }),
@@ -778,9 +803,9 @@ function test_hookDataPassedToBeforeSwap() public {
 
     swapRouter.swap(
         key,
-        IPoolManager.SwapParams({
+        SwapParams({
             zeroForOne: true,
-            amountSpecified: 1 ether,
+            amountSpecified: -1 ether,
             sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1
         }),
         PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false}),
@@ -796,9 +821,9 @@ function test_emptyHookData() public {
     // Hook should handle empty hookData gracefully
     swapRouter.swap(
         key,
-        IPoolManager.SwapParams({
+        SwapParams({
             zeroForOne: true,
-            amountSpecified: 1 ether,
+            amountSpecified: -1 ether,
             sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1
         }),
         PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false}),
@@ -818,9 +843,9 @@ function test_revert_uninitializedPool() public {
     vm.expectRevert();
     swapRouter.swap(
         badKey,
-        IPoolManager.SwapParams({
+        SwapParams({
             zeroForOne: true,
-            amountSpecified: 1 ether,
+            amountSpecified: -1 ether,
             sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1
         }),
         PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false}),
@@ -832,7 +857,7 @@ function test_revert_swapZeroAmount() public {
     vm.expectRevert();
     swapRouter.swap(
         key,
-        IPoolManager.SwapParams({
+        SwapParams({
             zeroForOne: true,
             amountSpecified: 0,
             sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1
@@ -848,9 +873,9 @@ function test_revert_hookCustomError() public {
     hook.setPaused(poolId, true);
     swapRouter.swap(
         key,
-        IPoolManager.SwapParams({
+        SwapParams({
             zeroForOne: true,
-            amountSpecified: 1 ether,
+            amountSpecified: -1 ether,
             sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1
         }),
         PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false}),
@@ -874,7 +899,7 @@ function test_nativeETHPool() public {
 
     modifyLiquidityRouter.modifyLiquidity{value: 10 ether}(
         ethKey,
-        IPoolManager.ModifyLiquidityParams({
+        ModifyLiquidityParams({
             tickLower: -120,
             tickUpper: 120,
             liquidityDelta: 10 ether,
@@ -885,9 +910,9 @@ function test_nativeETHPool() public {
 
     swapRouter.swap{value: 1 ether}(
         ethKey,
-        IPoolManager.SwapParams({
+        SwapParams({
             zeroForOne: true,
-            amountSpecified: 1 ether,
+            amountSpecified: -1 ether,
             sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1
         }),
         PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false}),
@@ -923,7 +948,6 @@ abstract contract HookTestBase is Test, Deployers {
     using StateLibrary for IPoolManager;
 
     MyHook hook;
-    PoolKey key;
     PoolId poolId;
 
     function setUp() public virtual {
@@ -951,7 +975,7 @@ abstract contract HookTestBase is Test, Deployers {
     function _seedLiquidity() internal {
         modifyLiquidityRouter.modifyLiquidity(
             key,
-            IPoolManager.ModifyLiquidityParams({
+            ModifyLiquidityParams({
                 tickLower: -600, tickUpper: 600,
                 liquidityDelta: 100 ether, salt: bytes32(0)
             }),
@@ -962,9 +986,9 @@ abstract contract HookTestBase is Test, Deployers {
     function _swapExactIn(bool zeroForOne, uint256 amount) internal returns (BalanceDelta) {
         return swapRouter.swap(
             key,
-            IPoolManager.SwapParams({
+            SwapParams({
                 zeroForOne: zeroForOne,
-                amountSpecified: int256(amount),
+                amountSpecified: -int256(amount),  // negative = exact input
                 sqrtPriceLimitX96: zeroForOne
                     ? TickMath.MIN_SQRT_PRICE + 1
                     : TickMath.MAX_SQRT_PRICE - 1
@@ -996,7 +1020,7 @@ abstract contract HookTestBase is Test, Deployers {
 - [ ] **Delta returns**: hooks with RETURNS_DELTA flags modify swap/liquidity amounts correctly
 - [ ] **Revert paths**: invalid inputs, paused states, and unauthorized access revert correctly
 - [ ] **Native ETH**: pool with `Currency.wrap(address(0))` works with hook
-- [ ] **Gas overhead**: hook callbacks measured under 50K gas each via `forge snapshot`
+- [ ] **Gas overhead**: hook callback overhead measured and documented via `forge snapshot` (no universal threshold; review regressions with `--check`)
 - [ ] **Gas comparison**: overhead vs no-hook pool documented
 - [ ] **Invariant: PM solvency**: PoolManager balances never go negative
 - [ ] **Invariant: price bounds**: sqrtPriceX96 stays within [MIN, MAX]

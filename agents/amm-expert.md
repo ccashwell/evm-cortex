@@ -46,17 +46,22 @@ L = Δy / (√(P_upper) - √(P_lower))                              // liquidit
 
 ```solidity
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.24;
+pragma solidity 0.8.26;
 
-import {BaseHook} from "v4-periphery/src/utils/BaseHook.sol";
+// BaseHook no longer ships in v4-periphery (removed 2026-02-06, PR #510). Pick one maintained base:
+import {BaseHook} from "@openzeppelin/uniswap-hooks/src/base/BaseHook.sol";   // pinned by Uniswap/v4-template
+// or: import {BaseHook} from "v4-hooks-public/src/base/BaseHook.sol";       // Uniswap Labs
 import {Hooks} from "v4-core/src/libraries/Hooks.sol";
 import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
 import {BalanceDelta} from "v4-core/src/types/BalanceDelta.sol";
 import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "v4-core/src/types/BeforeSwapDelta.sol";
+import {SwapParams} from "v4-core/src/types/PoolOperation.sol";
 import {Currency} from "v4-core/src/types/Currency.sol";
 
+// BaseHook's external callbacks are non-virtual and already `onlyPoolManager`;
+// override the internal `_before*`/`_after*` functions and return the external selector.
 contract MyHook is BaseHook {
     using PoolIdLibrary for PoolKey;
 
@@ -83,35 +88,31 @@ contract MyHook is BaseHook {
         });
     }
 
-    function afterInitialize(
-        address sender,
-        PoolKey calldata key,
-        uint160 sqrtPriceX96,
-        int24 tick
-    ) external override onlyPoolManager returns (bytes4) {
+    function _afterInitialize(address, PoolKey calldata key, uint160, int24)
+        internal
+        override
+        returns (bytes4)
+    {
         swapCount[key.toId()] = 0;
-        return this.afterInitialize.selector;
+        return BaseHook.afterInitialize.selector;
     }
 
-    function beforeSwap(
-        address sender,
-        PoolKey calldata key,
-        IPoolManager.SwapParams calldata params,
-        bytes calldata hookData
-    ) external override onlyPoolManager returns (bytes4, BeforeSwapDelta, uint24) {
+    function _beforeSwap(address, PoolKey calldata, SwapParams calldata, bytes calldata)
+        internal
+        override
+        returns (bytes4, BeforeSwapDelta, uint24)
+    {
         // Custom pre-swap logic (e.g., dynamic fees, access control)
-        return (this.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
+        return (BaseHook.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
     }
 
-    function afterSwap(
-        address sender,
-        PoolKey calldata key,
-        IPoolManager.SwapParams calldata params,
-        BalanceDelta delta,
-        bytes calldata hookData
-    ) external override onlyPoolManager returns (bytes4, int128) {
+    function _afterSwap(address, PoolKey calldata key, SwapParams calldata, BalanceDelta, bytes calldata)
+        internal
+        override
+        returns (bytes4, int128)
+    {
         swapCount[key.toId()]++;
-        return (this.afterSwap.selector, 0);
+        return (BaseHook.afterSwap.selector, 0);
     }
 }
 ```
@@ -120,9 +121,13 @@ contract MyHook is BaseHook {
 
 ### Dynamic Fee Hook
 ```solidity
-function beforeSwap(...) external override returns (bytes4, BeforeSwapDelta, uint24) {
+function _beforeSwap(address, PoolKey calldata key, SwapParams calldata, bytes calldata)
+    internal
+    override
+    returns (bytes4, BeforeSwapDelta, uint24)
+{
     uint24 fee = _calculateDynamicFee(key);
-    return (this.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, fee | LPFeeLibrary.OVERRIDE_FEE_FLAG);
+    return (BaseHook.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, fee | LPFeeLibrary.OVERRIDE_FEE_FLAG);
 }
 
 function _calculateDynamicFee(PoolKey calldata key) internal view returns (uint24) {
@@ -157,12 +162,16 @@ function _executeTWAMMOrders(PoolKey calldata key) internal {
 ```solidity
 mapping(PoolId => mapping(int24 => mapping(bool => uint256))) public limitOrders;
 
-function afterSwap(...) external override returns (bytes4, int128) {
+function _afterSwap(address, PoolKey calldata key, SwapParams calldata params, BalanceDelta, bytes calldata)
+    internal
+    override
+    returns (bytes4, int128)
+{
     int24 currentTick = _getCurrentTick(key);
     // Check if price crossed any limit order ticks
     // Fill orders that are now in-the-money
     _fillCrossedOrders(key, currentTick, params.zeroForOne);
-    return (this.afterSwap.selector, 0);
+    return (BaseHook.afterSwap.selector, 0);
 }
 ```
 
@@ -174,8 +183,8 @@ function afterSwap(...) external override returns (bytes4, int128) {
 2. **Choose minimal permissions** — only enable the hooks you need. Each enabled hook adds gas cost to every matching operation.
 3. **Preserve pool invariants** — hooks must not break the AMM's core accounting. If your hook modifies deltas, prove conservation of value.
 4. **Consider MEV implications** — beforeSwap hooks that read onchain state can be front-run. Use commit-reveal or batch auctions for price-sensitive logic.
-5. **Test with the V4 test framework** — use `PoolManager` deployers and routers from v4-periphery for realistic testing.
-6. **Gas budget** — hooks execute on every swap. Keep gas under 50K for beforeSwap/afterSwap. Profile with `forge test --gas-report`.
+5. **Test with the V4 test framework** — use `Deployers` (`v4-core/test/utils/Deployers.sol`) and the test routers (`PoolSwapTest`, `PoolModifyLiquidityTest` from `v4-core/src/test/`) for realistic testing.
+6. **Gas budget** — hooks execute on every swap. There is no universal gas threshold; measure `beforeSwap`/`afterSwap` overhead on realistic and adversarial state with `forge test --gas-report` and track regressions with `forge snapshot --check`.
 
 ### Impermanent Loss Calculation:
 

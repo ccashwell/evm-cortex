@@ -10,6 +10,12 @@ revision of the Uniswap V4 template or pin `v4-core`, `v4-periphery`, and the
 hook library to known-compatible revisions. Do not combine examples from
 different releases.
 
+As of 2026-02-06 `v4-periphery` no longer contains `BaseHook` or `HookMiner`
+(PR #510). Use `@openzeppelin/uniswap-hooks` (what `Uniswap/v4-template` pins)
+or `Uniswap/v4-hooks-public`; both expose the same `_before*`/`_after*`
+internal-override API. `HookMiner` also remains at
+`v4-periphery/test/shared/HookMiner.sol`.
+
 Before editing, inspect the project's `foundry.lock`, `.gitmodules`, and
 remappings. Read `Hooks.sol`, `IHooks.sol`, `PoolOperation.sol`, `BaseHook.sol`,
 and `HookMiner.sol` at those installed revisions. The links at the end are for
@@ -104,6 +110,13 @@ response must be exactly 64 bytes.
 When the project's pinned dependency graph uses OpenZeppelin's hook library,
 override the internal `_before*` and `_after*` functions of its `BaseHook`. The
 inherited external entry points already enforce `onlyPoolManager`.
+
+The import path below assumes the `Uniswap/v4-template` remapping
+`@openzeppelin/uniswap-hooks/=lib/uniswap-hooks/`. OpenZeppelin's own README
+recommends `@openzeppelin/uniswap-hooks/=lib/uniswap-hooks/src/`, under which
+the same file is `@openzeppelin/uniswap-hooks/base/BaseHook.sol`. The path
+depends on your remapping; check it before treating a "file not found" as a
+missing dependency.
 
 ```solidity
 // SPDX-License-Identifier: MIT

@@ -7,6 +7,7 @@ permissions:
   contents: read
   pull-requests: write
   issues: write
+  id-token: write
 
 jobs:
   claude-review:
@@ -19,8 +20,7 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          review_comment_prefix: "evm-cortex-review"
-          direct_prompt: |
+          prompt: |
             Review this PR for:
             1. Solidity code quality and security patterns
             2. Smart contract vulnerabilities (reentrancy, access control, oracle manipulation)

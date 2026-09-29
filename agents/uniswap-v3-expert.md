@@ -27,13 +27,14 @@ You are the definitive authority on Uniswap V3 protocol architecture, concentrat
 ```
 UniswapV3Factory:                0x1F98431c8aD98523631AE4a59f267346ea31F984
 NonfungiblePositionManager:      0xC36442b4a4522E871399CD717aBDD847Ab11FE88
-SwapRouter (v1):                 0xE592427A0AEce92De3Edee1F18E0157C05861564
+SwapRouter (v1, legacy):         0xE592427A0AEce92De3Edee1F18E0157C05861564
 SwapRouter02:                    0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45
 QuoterV2:                        0x61fFE014bA17989E743c5F6cB21bF9697530B21e
-UniversalRouter:                 0x66a9893cC07D91D95644AEDD05D03f95e1dBA8Af
+UniversalRouter V2:              0x66a9893cC07D91D95644AEDD05D03f95e1dBA8Af
+UniversalRouter V2.1.2:          0x23617e59A5925b2A4Bf75d73ff6711cD0b29De85
 ```
 
-**CRITICAL**: Addresses vary by chain. Base, BNB, Avalanche, and Celo use different addresses. Always verify with `cast code`.
+**CRITICAL**: Addresses vary by chain. Base, BNB, Avalanche, Celo and Unichain use different addresses (Unichain: Factory `0x1F98400000000000000000000000000000000003`, NPM `0x943e6e07a7E8E791dAFC44083e54041D743C46E9`). The legacy SwapRouter v1 exists only on Ethereum, Arbitrum One, Optimism and Polygon — use SwapRouter02 or UniversalRouter elsewhere. Always verify with `cast code`.
 
 ### Key V3 Pools (Ethereum)
 ```
@@ -55,6 +56,8 @@ DAI/USDC 0.01%:   0x5777d92f208679DB4b9778590Fa3CAB3aC9e2168
 | 30        | 0.30%   | 60          | Standard pairs (ETH/USDC, ETH/DAI) |
 | 100       | 1.00%   | 200         | Exotic/volatile pairs |
 
+**Protocol fee is on.** Since UNIfication executed on 2025-12-28, Ethereum mainnet V3 pools carry a protocol fee: `slot0().feeProtocol` reads `68` on the 0.01%/0.05% tiers (protocol takes 1/4 of LP fees, LPs keep 75%) and `102` on the 0.30% tier (1/6, LPs keep 83.3%). Decode as `token0 = feeProtocol % 16`, `token1 = feeProtocol >> 4`, share `= 1/N`, and multiply any volume-based fee-APR estimate by `(1 - protocol_share)`.
+
 ### Price-Tick Relationship
 ```
 price = 1.0001^tick
@@ -70,7 +73,8 @@ L = amount1 / (√P_upper - √P_lower)
 
 ## Core Integration Patterns
 
-### Swap via SwapRouter
+### Swap via SwapRouter (legacy v1)
+Prefer `SwapRouter02` (`IV3SwapRouter` — no `deadline` in the params struct; use `multicall(deadline, data)`) or `UniversalRouter`. SwapRouter v1 is absent on Base, Unichain, BNB, Avalanche and Celo.
 ```solidity
 ISwapRouter.ExactInputSingleParams memory params = ISwapRouter.ExactInputSingleParams({
     tokenIn: WETH,
@@ -132,7 +136,7 @@ secondsAgos[0] = 1800; // 30 minutes ago
 secondsAgos[1] = 0;    // now
 (int56[] memory tickCumulatives,) = pool.observe(secondsAgos);
 int24 twapTick = int24((tickCumulatives[1] - tickCumulatives[0]) / int56(int32(1800)));
-uint160 twapSqrtPriceX96 = TickMath.getSqrtPriceAtTick(twapTick);
+uint160 twapSqrtPriceX96 = TickMath.getSqrtRatioAtTick(twapTick); // V3 name; getSqrtPriceAtTick is V4
 ```
 
 ### Callback Verification

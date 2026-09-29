@@ -40,11 +40,13 @@ This means multi-hop swaps (e.g., A→B→C) only require net token movements fo
 
 ### Functions Callable Outside unlock()
 
-Only two functions do NOT require the unlock context:
+Functions callable outside `unlock()`:
 - `initialize()` — creates a new pool (no balance changes)
+- `sync(currency)` — snapshots reserves into transient storage; harmless outside a lock
 - `updateDynamicLPFee()` — called by hook contracts to set the current dynamic fee
+- the `IProtocolFees` admin functions (`setProtocolFeeController`, `setProtocolFee`, `collectProtocolFees`)
 
-Everything else (`swap`, `modifyLiquidity`, `donate`, `take`, `settle`, `mint`, `burn`, `sync`, `clear`) requires being inside an active `unlockCallback`.
+`swap`, `modifyLiquidity`, `donate`, `take`, `settle`, `settleFor`, `clear`, `mint`, `burn` are all `onlyWhenUnlocked` and must run inside an active `unlockCallback`.
 
 ## Core Types
 
@@ -320,19 +322,24 @@ Two mechanisms for dynamic fee updates:
 2. **Per-swap override**: `beforeSwap` returns a fee with the override flag set in the third return value (`uint24`). The returned fee is `desiredFee | LPFeeLibrary.OVERRIDE_FEE_FLAG`. This overrides the stored fee for that single swap only.
 
 ```solidity
-function beforeSwap(address, PoolKey calldata, IPoolManager.SwapParams calldata, bytes calldata)
-    external
+import {SwapParams} from "v4-core/src/types/PoolOperation.sol";
+
+// Inside a BaseHook subclass: override the internal _beforeSwap, not the external entry point
+function _beforeSwap(address, PoolKey calldata, SwapParams calldata, bytes calldata)
+    internal
     override
     returns (bytes4, BeforeSwapDelta, uint24)
 {
     uint24 dynamicFee = _computeFee();
-    return (this.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, dynamicFee | LPFeeLibrary.OVERRIDE_FEE_FLAG);
+    return (BaseHook.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, dynamicFee | LPFeeLibrary.OVERRIDE_FEE_FLAG);
 }
 ```
 
 ### Protocol Fees
 
-Set by the PoolManager owner via `IProtocolFees.setProtocolFee(PoolKey, uint24)`. Protocol fees are taken as a percentage of LP fees. The protocol fee is a `uint24` where the upper 12 bits are the fee for token0 and the lower 12 bits are the fee for token1.
+Set by the `protocolFeeController` (appointed by the PoolManager owner via `setProtocolFeeController`) through `IProtocolFees.setProtocolFee(PoolKey, uint24)`. The `uint24` packs two direction-specific fees in pips: lower 12 bits = zeroForOne, upper 12 bits = oneForZero, each `<= ProtocolFeeLibrary.MAX_PROTOCOL_FEE` (1000 pips = 0.1%). The protocol fee is charged on the swap input first; the LP fee applies to the remainder (`swapFee = protocolFee + lpFee - protocolFee * lpFee / 1e6`).
+
+Protocol fees are live on mainnet V4 pools since the governance proposal "Activate v4 Protocol Fees (Part 1/2)" executed on 2026-07-27. On Ethereum, `PoolManager.owner()` is the governance timelock `0x1a9C8182C09F50C8318d769245beA52c32BE35BC` and `protocolFeeController()` is `0x89A5D5bF00a27D55c02951E49078a5C5771051dB`; the native ETH/USDC 500/10 pool reports `protocolFee = 512125` (125 pips in each direction). Fee-revenue models for hooks and LPs must account for this cut.
 
 ## PositionManager (Periphery)
 
@@ -377,6 +384,7 @@ library Actions {
     uint256 internal constant SWAP_EXACT_IN               = 0x07;
     uint256 internal constant SWAP_EXACT_OUT_SINGLE       = 0x08;
     uint256 internal constant SWAP_EXACT_OUT              = 0x09;
+    uint256 internal constant DONATE                      = 0x0a; // not supported by PositionManager or V4Router
     uint256 internal constant SETTLE                      = 0x0b;
     uint256 internal constant SETTLE_ALL                  = 0x0c;
     uint256 internal constant SETTLE_PAIR                 = 0x0d;
@@ -389,8 +397,13 @@ library Actions {
     uint256 internal constant SWEEP                       = 0x14;
     uint256 internal constant WRAP                        = 0x15;
     uint256 internal constant UNWRAP                      = 0x16;
+    uint256 internal constant MINT_6909                   = 0x17; // not supported by PositionManager or V4Router
+    uint256 internal constant BURN_6909                   = 0x18; // not supported by PositionManager or V4Router
+    uint256 internal constant UNWIND_WITH_FALLBACK        = 0x19;
 }
 ```
+
+The library defines 26 constants (`0x00`–`0x19`); the two deprecated `*_FROM_DELTAS` codes are listed below.
 
 **DEPRECATED** (vulnerable to sandwich attacks — lack slippage protection):
 - `INCREASE_LIQUIDITY_FROM_DELTAS` (0x04)
@@ -423,11 +436,14 @@ Burn an empty position:
 The `Notifier` base enables position subscribers — external contracts that receive callbacks when a position is modified. Subscribers implement `ISubscriber`:
 
 ```solidity
+import {BalanceDelta} from "v4-core/src/types/BalanceDelta.sol";
+import {PositionInfo} from "v4-periphery/src/libraries/PositionInfoLibrary.sol";
+
 interface ISubscriber {
     function notifySubscribe(uint256 tokenId, bytes memory data) external;
     function notifyUnsubscribe(uint256 tokenId) external;
     function notifyModifyLiquidity(uint256 tokenId, int256 liquidityChange, BalanceDelta feesAccrued) external;
-    function notifyBurn(uint256 tokenId) external;
+    function notifyBurn(uint256 tokenId, address owner, PositionInfo info, uint256 liquidity, BalanceDelta feesAccrued) external;
 }
 ```
 
@@ -440,14 +456,34 @@ Subscribe via `positionManager.subscribe(tokenId, subscriber, data)`. The subscr
 | Contract | Address |
 |----------|---------|
 | PoolManager | `0x000000000004444c5dc75cB358380D2e3dE08A90` |
-| Universal Router | `0x66a9893cC07D91D95644AEDD05D03f95e1dBA8Af` |
+| Universal Router (V2) | `0x66a9893cC07D91D95644AEDD05D03f95e1dBA8Af` |
+| Universal Router 2.1.1 | `0x4C82D1fBFe28C977cBB58D8C7FF8FCF9F70a2cCA` |
+| Universal Router 2.1.2 | `0x23617e59A5925b2A4Bf75d73ff6711cD0b29De85` |
 | PositionManager | `0xbD216513d74C8cf14cf4747E6AaA6420FF64ee9e` |
+| PositionDescriptor | `0xd1428Ba554F4C8450b763a0B2040A4935c63f06C` |
+| StateView | `0x7fFE42C4a5DEeA5b0feC41C94C136Cf115597227` |
+| V4Quoter | `0x52F0E24D1c21C8A0cB1e5a5dD6198556BD9E1203` |
+| ReservesLens | `0x0000001b173C3bbF3984D417d8614E3eed34865B` |
+| Permit2 | `0x000000000022D473030F116dDEE9F6B43aC78BA3` |
+
+### Unichain (Chain ID: 130)
+
+| Contract | Address |
+|----------|---------|
+| PoolManager | `0x1F98400000000000000000000000000000000004` |
+| PositionManager | `0x4529A01c7A0410167c5740C487A8DE60232617bf` |
+| StateView | `0x86e8631A016F9068C3f085fAF484Ee3F5fDee8f2` |
+| V4Quoter | `0x333E3C607B141b18fF6de9f258db6e77fE7491E0` |
+| Universal Router (V2) | `0xEf740bf23aCaE26f6492B10de645D6B98dC8Eaf3` |
+| Universal Router 2.1.2 | `0xD1b797D92d87B688193A2B976eFc8D577D204343` |
+
+RPC: `https://mainnet.unichain.org`. All Unichain addresses above were verified with `cast code`; the Ethereum PoolManager address has no code on Unichain. Unichain's `protocolFeeController()` is still `address(0)`, so protocol fees are not yet active there.
 
 ### Supported Chains
 
-V4 is deployed on: **Ethereum, Unichain, Optimism, Base, Arbitrum One, Polygon, Blast, Zora, Worldchain, Ink, Soneium, Avalanche, BNB Smart Chain, Celo, Monad, MegaETH, Tempo**
+V4 is deployed on 19 mainnets: **Ethereum, Unichain, Optimism, Base, Arbitrum One, Polygon, Zora, Worldchain, X Layer, Ink, Soneium, Avalanche, BNB Smart Chain, Celo, Monad, MegaETH, Tempo, Robinhood Chain, Arc**. Blast was removed from the official list (its onchain status is unverified).
 
-**CRITICAL**: Addresses are NOT the same across chains. Always verify per-chain at https://docs.uniswap.org/contracts/v4/deployments. Use `cast code <address> --rpc-url <rpc>` to confirm deployment before integrating.
+**CRITICAL**: Addresses are NOT the same across chains. Always verify per-chain at https://developers.uniswap.org/docs/protocols/v4/deployments. Use `cast code <address> --rpc-url <rpc>` to confirm deployment before integrating.
 
 ## Integration Patterns
 
@@ -549,6 +585,7 @@ poolManager.burn(address(this), currency.toId(), amount);
 ```bash
 forge install uniswap/v4-core
 forge install uniswap/v4-periphery
+forge install OpenZeppelin/uniswap-hooks   # BaseHook (no longer in v4-periphery)
 ```
 
 ### Remappings (foundry.toml or remappings.txt)
@@ -560,6 +597,7 @@ remappings = [
     "v4-periphery/=lib/v4-periphery/",
     "@uniswap/v4-core/=lib/v4-core/",
     "@uniswap/v4-periphery/=lib/v4-periphery/",
+    "@openzeppelin/uniswap-hooks/=lib/uniswap-hooks/",
     "permit2/=lib/v4-periphery/lib/permit2/",
     "forge-std/=lib/forge-std/src/",
 ]
@@ -588,8 +626,9 @@ import {LPFeeLibrary} from "v4-core/src/libraries/LPFeeLibrary.sol";
 import {StateLibrary} from "v4-core/src/libraries/StateLibrary.sol";
 import {TransientStateLibrary} from "v4-core/src/libraries/TransientStateLibrary.sol";
 
-// Periphery — hooks
-import {BaseHook} from "v4-periphery/src/base/hooks/BaseHook.sol";
+// Periphery — hooks (BaseHook no longer ships in v4-periphery; pick one)
+import {BaseHook} from "@openzeppelin/uniswap-hooks/src/base/BaseHook.sol";   // v4-template default
+// or: import {BaseHook} from "v4-hooks-public/src/base/BaseHook.sol";       // Uniswap Labs
 
 // Periphery — position management
 import {IPositionManager} from "v4-periphery/src/interfaces/IPositionManager.sol";
@@ -636,10 +675,10 @@ The `Deployers` helper from `v4-core/test/utils/Deployers.sol` provides `deployF
 | Token transfers | Direct transfers on every operation | Flash accounting (deltas in transient storage) |
 | Multi-hop efficiency | Transfer tokens between each pool | Net settlement — only endpoints transfer |
 | Native ETH | Must wrap to WETH first | Native ETH via `Currency.wrap(address(0))` |
-| Extensibility | No hook system | 14 hook callbacks with return-delta support |
+| Extensibility | No hook system | 10 hook callbacks (14 permission flags incl. 4 return-delta flags) |
 | Fee model | Fixed fee tiers (0.01%, 0.05%, 0.30%, 1%) | Arbitrary static fees + dynamic fees via hooks |
 | Fee distribution | Swap fees only | `donate()` for direct distribution to LPs |
-| Position NFTs | NonfungiblePositionManager (V3) | PositionManager with Permit2 + ERC-6909 |
+| Position NFTs | NonfungiblePositionManager (V3) | PositionManager (still ERC-721) with Permit2 and batched `Actions`; ERC-6909 is for PoolManager claim tokens, not positions |
 | LP fee updates | Immutable after pool creation | Dynamic via `updateDynamicLPFee()` |
 | Transient storage | Not used (pre-Cancun) | EIP-1153 for delta tracking |
 | Flash loans | Dedicated `flash()` function | Implicit via unlock — take first, settle later |
@@ -763,7 +802,7 @@ When a hook has `afterSwapReturnDelta` permission, the `int128` returned from `a
 - [ ] PoolKey fee is valid: either a static fee `<= 1_000_000` or exactly `DYNAMIC_FEE_FLAG`
 - [ ] `tickSpacing > 0` and `<= type(int16).max`
 - [ ] Pool is initialized before any swaps or liquidity operations
-- [ ] All operations (except `initialize`) are inside an `unlockCallback`
+- [ ] Every balance-changing operation (`swap`, `modifyLiquidity`, `donate`, `take`, `settle`, `settleFor`, `clear`, `mint`, `burn`) runs inside an `unlockCallback`; only `initialize`, `sync`, `updateDynamicLPFee`, and the `IProtocolFees` admin functions are callable outside
 - [ ] `unlockCallback` validates `msg.sender == address(poolManager)`
 
 ### Delta Resolution

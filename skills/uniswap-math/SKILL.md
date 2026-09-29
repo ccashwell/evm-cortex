@@ -37,7 +37,7 @@ Human-readable price: 1 ETH = 3000 USDC
 Raw price (token1/token0) = 3000 × 10⁶ / 10¹⁸ = 3000 × 10⁻¹²
 
 sqrtPrice = √(3000 × 10⁻¹²) = √(3 × 10⁻⁹) ≈ 5.47722558 × 10⁻⁵
-sqrtPriceX96 = 5.47722558 × 10⁻⁵ × 2⁹⁶ ≈ 4_339_505_179_874_779_489_878_115
+sqrtPriceX96 = 5.47722558 × 10⁻⁵ × 2⁹⁶ ≈ 4_339_505_179_874_779_489_431_521
 ```
 
 For a pair where both tokens have 18 decimals (e.g., WETH/DAI at price 3000):
@@ -45,7 +45,7 @@ For a pair where both tokens have 18 decimals (e.g., WETH/DAI at price 3000):
 ```
 Raw price = 3000 (decimals cancel)
 sqrtPrice = √3000 ≈ 54.7722558
-sqrtPriceX96 = 54.7722558 × 2⁹⁶ ≈ 4_339_505_179_874_779_163_484_739_850_572_800
+sqrtPriceX96 = 54.7722558 × 2⁹⁶ ≈ 4_339_505_179_874_779_489_431_521_786_241
 ```
 
 ### Converting sqrtPriceX96 to Human Price
@@ -64,8 +64,8 @@ def sqrtPriceX96_to_price(sqrtPriceX96, decimals0, decimals1):
     adjusted = price * 10 ** (decimals0 - decimals1)
     return adjusted
 
-# ETH/USDC: sqrtPriceX96 = 4_339_505_179_874_779_489_878_115
-sqrtPriceX96_to_price(4_339_505_179_874_779_489_878_115, 18, 6)
+# ETH/USDC: sqrtPriceX96 = 4_339_505_179_874_779_489_431_521
+sqrtPriceX96_to_price(4_339_505_179_874_779_489_431_521, 18, 6)
 # ≈ 3000.0
 ```
 
@@ -674,12 +674,12 @@ Step 2: Square root
 
 Step 3: Scale by 2⁹⁶
   sqrtPriceX96 = 5.47722558 × 10⁻⁵ × 79228162514264337593543950336
-               ≈ 4_339_505_179_874_779_489_878_115
+               ≈ 4_339_505_179_874_779_489_431_521
 
 Step 4: Corresponding tick
-  tick = log(3 × 10⁻⁹) / log(1.0001) ≈ -196222
+  tick = floor(log(3 × 10⁻⁹) / log(1.0001)) = floor(-196256.35) = -196257
 
-Verification: TickMath.getSqrtPriceAtTick(-196222) should be ≈ sqrtPriceX96 above
+Verification: TickMath.getSqrtPriceAtTick(-196257) should be ≈ sqrtPriceX96 above (slightly below it, since the tick is floored)
 ```
 
 ### Example 2: Liquidity from Token Amounts
@@ -691,13 +691,13 @@ Scenario:
   Deposit: 1 ETH + 3000 USDC
 
 Step 1: Convert price bounds to ticks
-  tickLower ≈ -198242  (corresponding to ~$2500)
-  tickUpper ≈ -194626  (corresponding to ~$3500)
+  tickLower ≈ -198080  (corresponding to ~$2500)
+  tickUpper ≈ -194715  (corresponding to ~$3500)
 
 Step 2: Get sqrtPrices
   √P       = √(3000 × 10⁻¹²) × 2⁹⁶  (current, from Example 1)
-  √P_lower = √(2500 × 10⁻¹²) × 2⁹⁶ ≈ 3_961_408_831_915_985_491_200_000
-  √P_upper = √(3500 × 10⁻¹²) × 2⁹⁶ ≈ 4_689_982_010_565_498_048_200_000
+  √P_lower = √(2500 × 10⁻¹²) × 2⁹⁶ ≈ 3_961_408_125_713_216_879_677_197
+  √P_upper = √(3500 × 10⁻¹²) × 2⁹⁶ ≈ 4_687_201_305_027_700_927_646_043
 
 Step 3: Compute L from each token
   L_from_ETH = amount0 × √P × √P_upper / (√P_upper - √P)
@@ -740,10 +740,10 @@ Step 4: If √P_new crosses a tick boundary, split the computation:
 ### Example 4: Tick to Human-Readable Price
 
 ```
-Given: tick = -196222, token0 = WETH (18 dec), token1 = USDC (6 dec)
+Given: tick = -196257, token0 = WETH (18 dec), token1 = USDC (6 dec)
 
 Step 1: Raw price
-  rawPrice = 1.0001^(-196222) ≈ 3.000 × 10⁻⁹
+  rawPrice = 1.0001^(-196257) ≈ 3.000 × 10⁻⁹
 
 Step 2: Adjust for decimals
   humanPrice = rawPrice × 10^(decimals0 - decimals1)
@@ -751,7 +751,7 @@ Step 2: Adjust for decimals
              = 3.000 × 10⁻⁹ × 10¹²
              = 3000
 
-So tick -196222 ≈ $3000 ETH/USDC
+So tick -196257 ≈ $3000 ETH/USDC
 ```
 
 ```python
@@ -908,9 +908,9 @@ require(tickLower < tickUpper, "tickLower must be < tickUpper");
 
 ```solidity
 // From Pool.tickSpacingToMaxLiquidityPerTick:
-// tickSpacing=1   → maxLiq ≈ 1.91 × 10³⁷
-// tickSpacing=60  → maxLiq ≈ 1.15 × 10³⁹
-// tickSpacing=200 → maxLiq ≈ 3.83 × 10³⁹
+// tickSpacing=1   → maxLiq ≈ 1.918 × 10³²  ((2¹²⁸−1) / 1_774_545 ticks)
+// tickSpacing=60  → maxLiq ≈ 1.151 × 10³⁴  ((2¹²⁸−1) / 29_575 ticks)
+// tickSpacing=200 → maxLiq ≈ 3.835 × 10³⁴  ((2¹²⁸−1) / 8_873 ticks)
 ```
 
 ### 7. Fee Growth Wrapping

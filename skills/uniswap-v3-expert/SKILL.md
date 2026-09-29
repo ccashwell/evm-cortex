@@ -19,10 +19,10 @@ UniswapV3Factory (singleton)
 │
 Periphery contracts (stateless routers / managers):
 ├── NonfungiblePositionManager — wraps LP positions as ERC-721 NFTs
-├── SwapRouter — single and multi-hop exact-input / exact-output swaps
+├── SwapRouter (legacy v1) — single and multi-hop exact-input / exact-output swaps; Ethereum, Arbitrum, Optimism, Polygon only
 ├── SwapRouter02 — v2+v3 unified router with multicall
 ├── UniversalRouter — command-based router supporting v2, v3, permits, NFTs
-├── Quoter — off-chain swap simulation (reverts internally to return amounts)
+├── Quoter — offchain swap simulation (reverts internally to return amounts)
 ├── QuoterV2 — returns sqrtPriceX96After, initializedTicksCrossed, gasEstimate
 └── TickLens — batch read initialized ticks for a pool
 ```
@@ -96,6 +96,8 @@ Boundary values:
 | 1.00% | 10000 | 200 | Exotic pairs, high volatility |
 
 Tick spacing means LPs can only place range boundaries at ticks divisible by the spacing. The 1 bps tier was added via governance (not in original deployment).
+
+**Protocol fee is live on Ethereum mainnet.** Since the UNIfication governance proposal executed on 2025-12-28, mainnet V3 pools carry a protocol fee: `slot0().feeProtocol` is `68` on the 0.01% and 0.05% tiers (protocol takes 1/4 of LP fees) and `102` on the 0.30% tier (1/6). Decode it as `token0 = feeProtocol % 16`, `token1 = feeProtocol >> 4`, protocol share `= 1/N`; the `feeGrowthGlobal*X128` accumulators already accrue net of that share, so volume-based LP fee-revenue estimates must be multiplied by `(1 - protocol_share)`.
 
 ### Liquidity Math
 
@@ -461,7 +463,9 @@ positionManager.burn(tokenId);
 
 ## SwapRouter Integration
 
-### SwapRouter (original)
+### SwapRouter (legacy v1)
+
+The original `SwapRouter` (`0xE592427A0AEce92De3Edee1F18E0157C05861564`) is a legacy contract: it is deployed only on Ethereum, Arbitrum One, Optimism and Polygon and is absent from Base, Unichain, BNB, Avalanche and Celo (on Base and Unichain that address holds an unrelated contract). The official docs name `UniversalRouter` as the preferred swap entrypoint, with `SwapRouter02` as the V3-native alternative; the interface below is kept for reference and for reading existing integrations.
 
 ```solidity
 interface ISwapRouter {
@@ -717,37 +721,40 @@ function _verifyCallback(address tokenA, address tokenB, uint24 fee) internal vi
 |----------|---------|
 | UniswapV3Factory | `0x1F98431c8aD98523631AE4a59f267346ea31F984` |
 | NonfungiblePositionManager | `0xC36442b4a4522E871399CD717aBDD847Ab11FE88` |
-| SwapRouter | `0xE592427A0AEce92De3Edee1F18E0157C05861564` |
+| SwapRouter (legacy v1) | `0xE592427A0AEce92De3Edee1F18E0157C05861564` |
 | SwapRouter02 | `0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45` |
 | Quoter | `0xb27308f9F90D607463bb33eA1BeBb41C27CE5AB6` |
 | QuoterV2 | `0x61fFE014bA17989E743c5F6cB21bF9697530B21e` |
-| UniversalRouter (current) | `0x66a9893cC07D91D95644AEDD05D03f95e1dBA8Af` |
-| TickLens | `0xbfd8137f7d1516D3fe7e20F7doA5099eEc6856aF` |
+| UniversalRouter V2 | `0x66a9893cC07D91D95644AEDD05D03f95e1dBA8Af` |
+| UniversalRouter V2.1.1 | `0x4C82D1fBFe28C977cBB58D8C7FF8FCF9F70a2cCA` |
+| UniversalRouter V2.1.2 | `0x23617e59A5925b2A4Bf75d73ff6711cD0b29De85` |
+| TickLens | `0xbfd8137f7d1516D3ea5cA83523914859ec47F573` |
 
 ### Cross-Chain Deployments
 
-V3 core contracts (Factory, NPM, SwapRouter, Quoter) are deployed to the same addresses across all supported chains via CREATE2:
+The original CREATE2 set (Factory `0x1F98…F984`, NPM `0xC364…FE88`, SwapRouter `0xE592…1564`, SwapRouter02 `0x68b3…Fc45`, QuoterV2 `0x61fF…B21e`) is shared only by Ethereum, Arbitrum One, Optimism and Polygon (verified by `cast code`); every later chain has its own addresses:
 
-| Chain | Factory | NPM | SwapRouter |
-|-------|---------|-----|------------|
-| Arbitrum | `0x1F98431c...F984` | `0xC36442b4...FE88` | `0xE592427A...1564` |
-| Optimism | `0x1F98431c...F984` | `0xC36442b4...FE88` | `0xE592427A...1564` |
-| Polygon | `0x1F98431c...F984` | `0xC36442b4...FE88` | `0xE592427A...1564` |
-| Base | `0x33128a8fC17869897dcE68Ed026d694621f6FDfD` | `0x03a520b32C04BF3bEEf7BEb72E919cf822Ed34f1` | varies |
-| BNB Chain | `0xdB1d10011AD0Ff90774D0C6Bb92e5C5c8b4461F7` | `0x7b8A01B39D58278b5DE7e48c8449c9f4F5170613` | varies |
-| Avalanche | `0x740b1c1de25031C31FF4fC9A62f554A55cdC1baD` | varies | varies |
-| Celo | `0xAfE208a311B21f13EF87E33A90049fC17A7acDEc` | varies | varies |
+| Chain | Factory | NPM | SwapRouter02 | QuoterV2 |
+|-------|---------|-----|--------------|----------|
+| Arbitrum | `0x1F98431c...F984` | `0xC36442b4...FE88` | `0x68b34658...Fc45` | `0x61fFE014...B21e` |
+| Optimism | `0x1F98431c...F984` | `0xC36442b4...FE88` | `0x68b34658...Fc45` | `0x61fFE014...B21e` |
+| Polygon | `0x1F98431c...F984` | `0xC36442b4...FE88` | `0x68b34658...Fc45` | `0x61fFE014...B21e` |
+| Base | `0x33128a8fC17869897dcE68Ed026d694621f6FDfD` | `0x03a520b32C04BF3bEEf7BEb72E919cf822Ed34f1` | `0x2626664c2603336E57B271c5C0b26F421741e481` | `0x3d4e44Eb1374240CE5F1B871ab261CD16335B76a` |
+| Unichain | `0x1F98400000000000000000000000000000000003` | `0x943e6e07a7E8E791dAFC44083e54041D743C46E9` | `0x73855d06DE49d0fe4A9c42636Ba96c62da12FF9C` | `0x385A5cf5F83e99f7BB2852b6A19C3538b9FA7658` |
+| BNB Chain | `0xdB1d10011AD0Ff90774D0C6Bb92e5C5c8b4461F7` | `0x7b8A01B39D58278b5DE7e48c8449c9f4F5170613` | `0xB971eF87ede563556b2ED4b1C0b0019111Dd85d2` | `0x78D78E420Da98ad378D7799bE8f4AF69033EB077` |
+| Avalanche | `0x740b1c1de25031C31FF4fC9A62f554A55cdC1baD` | `0x655C406EBFa14EE2006250925e54ec43AD184f8B` | `0xbb00FF08d01D300023C629E8fFfFcb65A5a578cE` | `0xbe0F5544EC67e9B3b2D979aaA43f18Fd87E6257F` |
+| Celo | `0xAfE208a311B21f13EF87E33A90049fC17A7acDEc` | `0x3d79EdAaBC0EaB6F08ED885C05Fc0B014290D95A` | `0x5615CDAb10dc425a742d643d949a7F474C01abc4` | `0x82825d0554fA07f7FC52Ab63c961F330fdEFa8E8` |
 
-**CRITICAL**: Addresses on Base, BNB, Avalanche, Celo, and newer chains differ from the canonical set. Always verify with `cast code <address> --rpc-url <chain>` or check the Uniswap Labs deployment repository before integrating.
+**CRITICAL**: Addresses on Base, BNB, Avalanche, Celo, and newer chains differ from the canonical set. Always verify with `cast code <address> --rpc-url <chain>` or check the official per-chain deployment pages at `https://developers.uniswap.org/docs/protocols/v3/deployments/<chain>` (the former `docs.uniswap.org` URLs redirect there) before integrating.
 
 ## Foundry Setup
 
 ### Install Dependencies
 
 ```bash
-forge install Uniswap/v3-core --no-commit
-forge install Uniswap/v3-periphery --no-commit
-forge install OpenZeppelin/openzeppelin-contracts --no-commit
+forge install Uniswap/v3-core
+forge install Uniswap/v3-periphery
+forge install OpenZeppelin/openzeppelin-contracts
 ```
 
 ### Remappings (foundry.toml or remappings.txt)
@@ -759,6 +766,8 @@ forge install OpenZeppelin/openzeppelin-contracts --no-commit
 ```
 
 ### Fork Testing Against Mainnet Pools
+
+This test targets the legacy `SwapRouter` v1, so it only works on Ethereum, Arbitrum One, Optimism and Polygon forks. To target `SwapRouter02` instead (`0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45` on Ethereum; per-chain addresses in the table above), use `IV3SwapRouter` from `Uniswap/swap-router-contracts` — its `ExactInputSingleParams` has no `deadline` field, so drop that line and wrap the call in `multicall(uint256 deadline, bytes[] data)` if you need a deadline.
 
 ```solidity
 // SPDX-License-Identifier: MIT
@@ -876,7 +885,7 @@ This is profitable because concentrated liquidity in a tiny range captures nearl
 | Pool architecture | One contract per pool | Singleton `PoolManager` |
 | Pool creation | `factory.createPool()` | `poolManager.initialize()` |
 | Token transfers | Callbacks (pull pattern) | Flash accounting with `settle()` / `take()` |
-| LP positions | `NonfungiblePositionManager` (ERC-721) | `PositionManager` (ERC-6909) |
+| LP positions | `NonfungiblePositionManager` (ERC-721) | `PositionManager` (ERC-721, Permit2, action-batched) |
 | Swap routing | `SwapRouter` / `SwapRouter02` | `UniversalRouter` or custom routers |
 | Extensibility | None | Hooks at every lifecycle point |
 | Fee model | Fixed fee tiers | Dynamic fees via hooks |
@@ -888,7 +897,7 @@ This is profitable because concentrated liquidity in a tiny range captures nearl
 ### Key Migration Considerations
 
 1. **Oracle removal**: V4 removed built-in oracles. If you depend on V3 TWAPs, either keep using V3 pools or implement an oracle hook in V4.
-2. **ERC-721 → ERC-6909**: V4 positions use semi-fungible ERC-6909 tokens instead of NFTs. This changes how positions are tracked and transferred.
+2. **Positions stay ERC-721**: V4 `PositionManager` mints ERC-721 NFTs ("Uniswap v4 Positions NFT") but is driven by batched `Actions` via `modifyLiquidities`; ERC-6909 in V4 is the PoolManager's claim-token standard (`mint`/`burn`), not LP positions.
 3. **Callback → flash accounting**: V3 callbacks that push tokens to the pool are replaced by V4's `settle()` and `take()` within an `unlock()` context.
 4. **Fee tiers → dynamic**: V3 fixed fee tiers become fully configurable via hooks in V4. Custom fee logic (volatility-based, time-based) is possible.
 
