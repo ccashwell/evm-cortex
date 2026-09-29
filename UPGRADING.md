@@ -63,7 +63,9 @@ These are user data:
 
 ## Version History
 
-### Unreleased
+### v1.1.0 (2026-09-29)
+
+Minor release. Installers gain a real upgrade mode, the Pashov audit pipeline moves to solidity-auditor v4 with loop mode and scan memory, `simao-audit-pipeline` and the `fizz` family are new, the Uniswap skills are corrected against current Uniswap code, and the EVM facts are refreshed. `package.json`, `plugin.json`, and `evm-cortex version` now agree on the version; the latter two had stayed at 1.0.0 through 1.0.1 and 1.0.2. Skills total 95, agents 50.
 
 **Installers now support upgrading.** Previously the default mode skipped every existing file and reported the result as "Skipped: N (already existed)", which made an upgrade a silent no-op — the documented `git pull && ./install.sh` flow updated nothing. Default mode now distinguishes *already current* from *out of date*, lists the stale files, and points at `--update`. `install-cursor.sh` gained overwrite support, which it previously lacked entirely.
 

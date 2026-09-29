@@ -13,7 +13,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const REPO_DIR = join(__dirname, '..');
 const CLAUDE_DIR = join(homedir(), '.claude');
-const VERSION = '1.0.0';
+const VERSION = '1.1.0';
 
 const COLORS = {
   reset: '\x1b[0m',
